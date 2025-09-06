@@ -40,9 +40,9 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     const values = updateSchema.parse(body);
     const row = await updatePerson(id, values);
     return NextResponse.json(row);
-  } catch (e: any) {
+  } catch (e: unknown) {
     console.error(e);
-    const status = e?.name === 'ZodError' ? 400 : 500;
+    const status = (typeof e === 'object' && e !== null && 'name' in e && (e as { name: string }).name === 'ZodError') ? 400 : 500;
     return NextResponse.json({ error: 'Failed to update person' }, { status });
   }
 }

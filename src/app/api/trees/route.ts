@@ -22,9 +22,9 @@ export async function POST(req: Request) {
     const { title } = createSchema.parse(body);
     const row = await createTree(title);
     return NextResponse.json(row, { status: 201 });
-  } catch (e: any) {
+  } catch (e: unknown) {
     console.error(e);
-    const status = e?.name === 'ZodError' ? 400 : 500;
+    const status = (typeof e === 'object' && e !== null && 'name' in e && (e as { name: string }).name === 'ZodError') ? 400 : 500;
     return NextResponse.json({ error: 'Failed to create tree' }, { status });
   }
 }

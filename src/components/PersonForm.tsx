@@ -1,6 +1,6 @@
 "use client";
 import { useEffect } from 'react';
-import { useForm } from 'react-hook-form';
+import { useForm, type Resolver } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Button } from './ui/Button';
@@ -22,7 +22,7 @@ const schema = z.object({
   return (v.familyName && v.familyName.length > 0) || (v.givenName && v.givenName.length > 0);
 }, { message: '姓か名のどちらかは必須', path: ['familyName'] });
 
-type FormValues = z.infer<typeof schema>;
+export type FormValues = z.infer<typeof schema>;
 
 export function PersonForm({ initial, onSave, onDelete, onOpenMap, extra }: {
   initial: Partial<FormValues>;
@@ -32,15 +32,15 @@ export function PersonForm({ initial, onSave, onDelete, onOpenMap, extra }: {
   extra?: React.ReactNode;
 }) {
   const { register, handleSubmit, formState: { errors }, watch, reset } = useForm<FormValues>({
-    resolver: zodResolver(schema),
-    defaultValues: initial as any,
+    resolver: zodResolver(schema) as unknown as Resolver<FormValues>,
+    defaultValues: initial as Partial<FormValues>,
     shouldUnregister: false,
     shouldFocusError: false,
   });
   const address = watch('address') ?? '';
 
   useEffect(() => {
-    reset(initial as any);
+    reset(initial as Partial<FormValues>);
   }, [initial, reset]);
 
   return (

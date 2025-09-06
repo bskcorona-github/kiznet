@@ -3,10 +3,10 @@ import React from 'react';
 import { useParams } from 'next/navigation';
 import { Toolbar } from '@/components/Toolbar';
 import { FamilyGraph } from '@/components/FamilyGraph';
-import { PersonForm } from '@/components/PersonForm';
+import { PersonForm, type FormValues } from '@/components/PersonForm';
 import type { Edge, Node } from 'reactflow';
 import { MarkerType } from 'reactflow';
-import type { Person, Relationship, TreeDetail } from '@lib/types';
+import type { TreeDetail } from '@lib/types';
 import { downloadCsv } from '@lib/csv';
 import { applyDagreLayout } from '@lib/layout';
 
@@ -32,8 +32,8 @@ export default function TreeEditorPage() {
     position: { x: 0, y: 0 },
     data: { id: p.id, label: `${p.familyName} ${p.givenName}`, birthDeath: `${p.birthDate ?? ''}${p.deathDate ? '–' + p.deathDate : '– '}` },
     type: 'default',
-    width: 180 as any,
-    height: 64 as any,
+    width: 180 as number,
+    height: 64 as number,
   }));
 
   const edges: Edge[] = (detail?.relationships ?? []).map((r) => ({
@@ -48,11 +48,11 @@ export default function TreeEditorPage() {
   const nodes: Node[] = React.useMemo(() => {
     if (!baseNodes.length) return [];
     const positions = applyDagreLayout(
-      baseNodes.map(n => ({ id: n.id, width: (n as any).width ?? 180, height: (n as any).height ?? 64 })),
+      baseNodes.map(n => ({ id: n.id, width: (n.width as number | undefined) ?? 180, height: (n.height as number | undefined) ?? 64 })),
       edges.map(e => ({ id: e.id, source: e.source, target: e.target }))
     );
     return baseNodes.map(n => ({ ...n, position: positions.get(n.id) ?? { x: 0, y: 0 } }));
-  }, [JSON.stringify(baseNodes), JSON.stringify(edges)]);
+  }, [baseNodes, edges]);
 
   const onAddPerson = async () => {
     if (!detail) return;
@@ -92,7 +92,23 @@ export default function TreeEditorPage() {
     setDetail({ ...detail, relationships: detail.relationships.filter(r => r.id !== id) });
   };
 
-  const onSave = async (values: any) => {
+  const toFormInitial = (p: TreeDetail['persons'][number] | undefined): Partial<FormValues> => {
+    if (!p) return {};
+    return {
+      familyName: p.familyName,
+      givenName: p.givenName,
+      kana: p.kana ?? undefined,
+      gender: p.gender,
+      birthDate: p.birthDate ?? undefined,
+      deathDate: p.deathDate ?? undefined,
+      address: p.address ?? undefined,
+      phone: p.phone ?? undefined,
+      email: p.email ?? undefined,
+      notes: p.notes ?? undefined,
+    };
+  };
+
+  const onSave = async (values: FormValues) => {
     if (!selectedId || !detail) return;
     // 空文字は null、空オブジェクト/配列は undefined に丸めて送る
     const normalized = Object.fromEntries(
@@ -123,7 +139,7 @@ export default function TreeEditorPage() {
           <FamilyGraph nodes={nodes} edges={edges} onNodeSelect={setSelectedId} />
         </div>
         <PersonForm
-          initial={detail?.persons.find(p => p.id === selectedId) ?? {}}
+          initial={toFormInitial(detail?.persons.find(p => p.id === selectedId))}
           onSave={onSave}
           onDelete={onDelete}
           onOpenMap={onOpenMap}
