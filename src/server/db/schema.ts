@@ -1,4 +1,4 @@
-import { pgTable, serial, varchar, timestamp, integer, boolean, date, index, uniqueIndex } from "drizzle-orm/pg-core";
+import { pgTable, serial, varchar, timestamp, integer, boolean, date } from "drizzle-orm/pg-core";
 
 export const trees = pgTable("trees", {
   id: serial("id").primaryKey(),
@@ -13,7 +13,7 @@ export const people = pgTable("people", {
   treeId: integer("tree_id").notNull(),
   firstName: varchar("first_name", { length: 80 }).notNull(),
   lastName: varchar("last_name", { length: 80 }),
-  sex: varchar("sex", { length: 10 }),
+  sex: varchar("sex", { length: 10 }), // male|female|other|unknown
   birthDate: date("birth_date"),
   deathDate: date("death_date"),
   isDeceased: boolean("is_deceased").default(false).notNull(),
@@ -28,20 +28,18 @@ export const people = pgTable("people", {
   note: varchar("note", { length: 1000 }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
-}, (t) => ({
-  treeIdx: index("people_tree_idx").on(t.treeId),
-}));
+});
 
+// 親子関係（有向：parent -> child）
 export const relationships = pgTable("relationships", {
   id: serial("id").primaryKey(),
   treeId: integer("tree_id").notNull(),
   parentId: integer("parent_id").notNull(),
   childId: integer("child_id").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-}, (t) => ({
-  uniqueRel: uniqueIndex("uq_parent_child").on(t.treeId, t.parentId, t.childId),
-}));
+});
 
+// 配偶者/パートナー関係（無向扱い。小さい id を A 側に揃える）
 export const partnerships = pgTable("partnerships", {
   id: serial("id").primaryKey(),
   treeId: integer("tree_id").notNull(),
@@ -49,10 +47,6 @@ export const partnerships = pgTable("partnerships", {
   partnerBId: integer("partner_b_id").notNull(),
   startDate: date("start_date"),
   endDate: date("end_date"),
-  type: varchar("type", { length: 24 }).default("marriage").notNull(),
+  type: varchar("type", { length: 24 }).default("marriage").notNull(), // marriage|partner
   createdAt: timestamp("created_at").defaultNow().notNull(),
-}, (t) => ({
-  uniquePair: uniqueIndex("uq_partner_pair").on(t.treeId, t.partnerAId, t.partnerBId),
-}));
-
-
+});
