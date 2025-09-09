@@ -16,6 +16,7 @@ interface FamilyTreeState {
   // UI state
   isLoading: boolean;
   error: string | null;
+  nodesLocked: boolean;
   
   // Search and filters
   searchFilters: SearchFilters;
@@ -53,6 +54,7 @@ interface FamilyTreeActions {
   // Layout
   applyAutoLayout: () => Promise<void>;
   applyLayeredLayout: () => Promise<void>;
+  setNodesLocked: (locked: boolean) => void;
   updateNodePosition: (id: string, position: { x: number; y: number }) => Promise<void>;
   resetAllPositions: () => Promise<void>;
   saveAllPositions: () => Promise<void>;
@@ -89,6 +91,7 @@ const initialState: FamilyTreeState = {
   selectedEdgeId: null,
   isLoading: false,
   error: null,
+  nodesLocked: false,
   searchFilters: {},
   history: [],
   historyIndex: -1,
@@ -332,6 +335,10 @@ export const useFamilyTreeStore = create<FamilyTreeStore>()(
         console.error("Layered layout failed:", e);
         set({ isLoading: false });
       }
+    },
+
+    setNodesLocked: (locked: boolean) => {
+      set({ nodesLocked: locked });
     },
 
     updateNodePosition: async (id, position) => {

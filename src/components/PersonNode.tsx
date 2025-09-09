@@ -1,6 +1,7 @@
 import React, { memo, useCallback } from "react";
 import { Handle, Position, NodeProps } from "reactflow";
 import { Card, CardContent } from "@/components/ui/card";
+import { LAYOUT } from "@/shared/config/layout";
 import PersonEditDialog from "./PersonEditDialog";
 import { Badge } from "@/components/ui/badge";
 import { PersonNode as PersonNodeType } from "@/types";
@@ -95,7 +96,7 @@ const PersonNode = memo(({ data, selected }: NodeProps<PersonNodeType["data"]>) 
 
       <Card
         className={cn(
-          "w-[160px] h-[80px] shadow-md transition-all duration-200 cursor-pointer hover:shadow-lg",
+          `w-[${LAYOUT.card.width}px] h-[${LAYOUT.card.height}px] shadow-md transition-all duration-200 cursor-pointer hover:shadow-lg`,
           selected && "ring-2 ring-blue-500 ring-offset-2 shadow-blue-200",
           isSearchHighlighted && "ring-2 ring-yellow-400 ring-offset-2 shadow-yellow-200",
           person.isDeceased && "bg-gray-50 border-gray-300 opacity-80"

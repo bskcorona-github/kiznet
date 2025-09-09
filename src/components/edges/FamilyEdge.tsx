@@ -1,6 +1,7 @@
 import React from "react";
 import { EdgeProps, getStraightPath, EdgeLabelRenderer } from "reactflow";
 import { useFamilyTreeStore } from "@/stores/family-tree-store";
+import { LAYOUT } from "@/shared/config/layout";
 
 // 家族専用エッジ（配偶者間の横線→中点から縦線→子どもへの分岐）
 const FamilyEdge: React.FC<EdgeProps> = ({
@@ -80,8 +81,8 @@ const FamilyEdge: React.FC<EdgeProps> = ({
     
 
     // PersonNode.tsx の描画に依存するデフォルト値（実測が無い場合のフォールバック）
-    const DEFAULT_WIDTH = 160;   // Cardの幅に合わせる（w-[160px]）
-    const DEFAULT_HEIGHT = 80;   // 最低高さ（h-[80px]）
+    const DEFAULT_WIDTH = LAYOUT.card.width;
+    const DEFAULT_HEIGHT = LAYOUT.card.height;
     
     let pathElements = [];
 
@@ -110,8 +111,8 @@ const FamilyEdge: React.FC<EdgeProps> = ({
       };
 
       // 夫婦線の実際のY座標（PartnershipEdgeに合わせて、ハンドルtop%を使う）
-      const CARD_HEIGHT = 80; // PersonNodeの高さ（h-[80px]）
-      const LINE_OFFSET = 35; // カードの下端からの線の位置オフセット（PartnershipEdgeと同じ値）
+      const CARD_HEIGHT = LAYOUT.card.height;
+      const LINE_OFFSET = LAYOUT.spouse.lineOffset;
       const percentForHandle = (h?: string) => (h === 'spouse-left-source' || h === 'spouse-right-target') ? 0.6 : 0.4;
       const srcCoupleNode = Array.isArray(nodes) ? nodes.find(n => n.id === coupleEdge?.source) : null;
       const tgtCoupleNode = Array.isArray(nodes) ? nodes.find(n => n.id === coupleEdge?.target) : null;
@@ -207,7 +208,7 @@ const FamilyEdge: React.FC<EdgeProps> = ({
       };
 
       // 階層的な線の描画：親の下 → 中間点 → 子の上
-      const intermediateY = parentBottomCenter.y + 30; // 中間点のY座標（よりコンパクトに）
+      const intermediateY = parentBottomCenter.y + LAYOUT.parent.intermediateDrop;
 
       // 1. 親の下端から中間点への縦線
       const [verticalFromParent] = getStraightPath({

@@ -4,6 +4,9 @@ import { relationships, partnerships } from "@/server/db/schema";
 import { eq, and, or, sql } from "drizzle-orm";
 
 export async function POST(request: NextRequest) {
+  if (process.env.DEBUG_FIX_KINJO !== "1") {
+    return NextResponse.json({ error: "DEBUG endpoint disabled. Set DEBUG_FIX_KINJO=1" }, { status: 403 });
+  }
   try {
     console.log("🔧 Starting Kinjo family data fix...");
 

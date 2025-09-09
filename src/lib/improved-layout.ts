@@ -10,6 +10,8 @@ import { PersonNode, FamilyEdge } from "@/types";
  * 4. 動的なノード配置調整
  */
 
+import { LAYOUT } from "@/shared/config/layout";
+
 interface LayoutConfig {
   nodeWidth: number;
   nodeHeight: number;
@@ -22,12 +24,12 @@ interface LayoutConfig {
 }
 
 const DEFAULT_CONFIG: LayoutConfig = {
-  nodeWidth: 160,         // 新しいカードサイズに合わせる（200→160）
-  nodeHeight: 80,         // 新しいカードサイズに合わせる（140→80）
-  minDistance: 40,        // ノード間の最小距離をさらに縮小（60→40）
-  generationHeight: 160,  // 世代間の高さをさらに縮小（200→160）
-  coupleDistance: 70,     // 配偶者間の距離（適度な間隔に調整）
-  familySpacing: 220,     // 家族間の距離をさらに縮小（280→220）
+  nodeWidth: LAYOUT.card.width,
+  nodeHeight: LAYOUT.card.height,
+  minDistance: LAYOUT.layout.minDistance,
+  generationHeight: LAYOUT.layout.generationHeight,
+  coupleDistance: LAYOUT.spouse.distance,
+  familySpacing: LAYOUT.layout.familySpacing,
   iterations: 100,
   dampening: 0.9
 };
@@ -309,72 +311,11 @@ function initializePositions(
  * 兄弟姉妹の並び順ソート
  * 男性優先、生年月日昇順
  */
+import { sortSiblingsByBirthAndSex } from "@/lib/sorting";
+
 function sortSiblings(nodeIds: string[], nodeMap: Map<string, PersonNode>): string[] {
-  return nodeIds.slice().sort((aId, bId) => {
-    const nodeA = nodeMap.get(aId);
-    const nodeB = nodeMap.get(bId);
-    
-    if (!nodeA || !nodeB) return 0;
-    
-    const personA = nodeA.data.person;
-    const personB = nodeB.data.person;
-    
-    // 1. 続柄による並び順（長男、次男、三男、長女、次女、三女の順）
-    const birthOrderA = personA.birthOrder || "";
-    const birthOrderB = personB.birthOrder || "";
-    
-    // 続柄の優先順位を定義
-    const getBirthOrderPriority = (birthOrder: string, sex: string) => {
-      if (!birthOrder) return 1000; // 続柄がない場合は最後
-      
-      // 男性の続柄
-      if (birthOrder.includes("長男")) return 1;
-      if (birthOrder.includes("次男")) return 2;
-      if (birthOrder.includes("三男")) return 3;
-      if (birthOrder.includes("四男")) return 4;
-      if (birthOrder.includes("五男")) return 5;
-      if (birthOrder.match(/[六七八九十]男/)) return 6;
-      
-      // 女性の続柄
-      if (birthOrder.includes("長女")) return 11;
-      if (birthOrder.includes("次女")) return 12;
-      if (birthOrder.includes("三女")) return 13;
-      if (birthOrder.includes("四女")) return 14;
-      if (birthOrder.includes("五女")) return 15;
-      if (birthOrder.match(/[六七八九十]女/)) return 16;
-      
-      // その他の続柄
-      if (sex === "male") return 100; // 男性だが続柄不明
-      if (sex === "female") return 200; // 女性だが続柄不明
-      return 300; // 性別・続柄ともに不明
-    };
-    
-    const priorityA = getBirthOrderPriority(birthOrderA, personA.sex || "");
-    const priorityB = getBirthOrderPriority(birthOrderB, personB.sex || "");
-    
-    if (priorityA !== priorityB) {
-      return priorityA - priorityB;
-    }
-    
-    // 2. 続柄が同じ場合は生年月日による並び順
-    const birthA = personA.birthDate ? new Date(personA.birthDate) : null;
-    const birthB = personB.birthDate ? new Date(personB.birthDate) : null;
-    
-    // 生年月日が両方ある場合
-    if (birthA && birthB) {
-      return birthA.getTime() - birthB.getTime();
-    }
-    
-    // 生年月日がある方を先に
-    if (birthA && !birthB) return -1;
-    if (!birthA && birthB) return 1;
-    
-    // 両方とも生年月日がない場合は名前順
-    const fullNameA = `${personA.lastName || ""} ${personA.firstName}`.trim();
-    const fullNameB = `${personB.lastName || ""} ${personB.firstName}`.trim();
-    
-    return fullNameA.localeCompare(fullNameB, 'ja');
-  });
+  const nodes: PersonNode[] = Array.from(nodeMap.values());
+  return sortSiblingsByBirthAndSex(nodeIds, nodes);
 }
 
 /**

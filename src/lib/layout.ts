@@ -1,6 +1,8 @@
 import { PersonNode, FamilyEdge } from "@/types";
 import { Node, Edge } from "reactflow";
 import { improvedFamilyTreeLayout } from "./improved-layout";
+import { LAYOUT } from "@/shared/config/layout";
+import { sortSiblingsByBirthAndSex } from "@/lib/sorting";
 
 // Dynamic import for elkjs to avoid SSR issues
 let elk: any = null;
@@ -189,14 +191,14 @@ function alignAncestorsToChildrenCenters(
 function convertToElkGraph(nodes: PersonNode[], edges: FamilyEdge[]) {
   const elkNodes = nodes.map((node) => ({
     id: node.id,
-    width: 180,
-    height: 80,
+    width: LAYOUT.card.width,
+    height: LAYOUT.card.height,
     // ラベルを追加（人物名）
     labels: [
       {
         id: `${node.id}-label`,
         text: `${node.data.person.lastName || ""} ${node.data.person.firstName}`.trim(),
-        width: 160,
+        width: LAYOUT.card.width - 20,
         height: 20,
       },
     ],
@@ -218,9 +220,9 @@ function convertToElkGraph(nodes: PersonNode[], edges: FamilyEdge[]) {
       // レイアウト方向（上から下）
       "elk.direction": "DOWN",
       // ノード間の間隔
-      "elk.spacing.nodeNode": "60",
+      "elk.spacing.nodeNode": String(Math.max(LAYOUT.layout.minDistance, 40)),
       // レイヤー間の間隔
-      "elk.layered.spacing.nodeNodeBetweenLayers": "80",
+      "elk.layered.spacing.nodeNodeBetweenLayers": String(Math.max(LAYOUT.layout.generationHeight, 80)),
       // エッジの間隔
       "elk.spacing.edgeEdge": "10",
       // エッジとノードの間隔
@@ -735,79 +737,7 @@ export function familyTreeLayout(
   return { nodes: layoutedNodes, edges: improvedEdges };
 }
 
-/**
- * 兄弟姉妹を生年月日と性別で並び順ソート
- * 男性優先、生年月日昇順
- */
-function sortSiblingsByBirthAndSex(childrenIds: string[], nodes: PersonNode[]): string[] {
-  const nodeMap = new Map(nodes.map(n => [n.id, n]));
-  
-  return childrenIds.slice().sort((aId, bId) => {
-    const nodeA = nodeMap.get(aId);
-    const nodeB = nodeMap.get(bId);
-    
-    if (!nodeA || !nodeB) return 0;
-    
-    const personA = nodeA.data.person;
-    const personB = nodeB.data.person;
-    
-    // 1. 続柄による並び順（長男、次男、三男、長女、次女、三女の順）
-    const birthOrderA = personA.birthOrder || "";
-    const birthOrderB = personB.birthOrder || "";
-    
-    // 続柄の優先順位を定義
-    const getBirthOrderPriority = (birthOrder: string, sex: string) => {
-      if (!birthOrder) return 1000; // 続柄がない場合は最後
-      
-      // 男性の続柄
-      if (birthOrder.includes("長男")) return 1;
-      if (birthOrder.includes("次男")) return 2;
-      if (birthOrder.includes("三男")) return 3;
-      if (birthOrder.includes("四男")) return 4;
-      if (birthOrder.includes("五男")) return 5;
-      if (birthOrder.match(/[六七八九十]男/)) return 6;
-      
-      // 女性の続柄
-      if (birthOrder.includes("長女")) return 11;
-      if (birthOrder.includes("次女")) return 12;
-      if (birthOrder.includes("三女")) return 13;
-      if (birthOrder.includes("四女")) return 14;
-      if (birthOrder.includes("五女")) return 15;
-      if (birthOrder.match(/[六七八九十]女/)) return 16;
-      
-      // その他の続柄
-      if (sex === "male") return 100; // 男性だが続柄不明
-      if (sex === "female") return 200; // 女性だが続柄不明
-      return 300; // 性別・続柄ともに不明
-    };
-    
-    const priorityA = getBirthOrderPriority(birthOrderA, personA.sex || "");
-    const priorityB = getBirthOrderPriority(birthOrderB, personB.sex || "");
-    
-    if (priorityA !== priorityB) {
-      return priorityA - priorityB;
-    }
-    
-    // 2. 続柄が同じ場合は生年月日による並び順
-    const birthA = personA.birthDate ? new Date(personA.birthDate) : null;
-    const birthB = personB.birthDate ? new Date(personB.birthDate) : null;
-    
-    // 生年月日が両方ある場合
-    if (birthA && birthB) {
-      return birthA.getTime() - birthB.getTime();
-    }
-    
-    // 生年月日がある方を先に
-    if (birthA && !birthB) return -1;
-    if (!birthA && birthB) return 1;
-    
-    // 両方とも生年月日がない場合は名前順
-    const fullNameA = `${personA.lastName || ""} ${personA.firstName}`.trim();
-    const fullNameB = `${personB.lastName || ""} ${personB.firstName}`.trim();
-    
-    return fullNameA.localeCompare(fullNameB, 'ja');
-  });
-}
+// 同名関数は '@/lib/sorting' 側に集約
 
 // 改善された家系図用エッジ生成
 function createFamilyTreeEdges(

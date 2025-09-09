@@ -46,6 +46,7 @@ const TreeCanvas: React.FC = () => {
     loadTreeData,
     applyAutoLayout,
     updateNodePosition,
+    nodesLocked,
   } = useFamilyTreeStore();
 
   // 型テーブルは外側の定数を使用（警告回避）
@@ -62,6 +63,7 @@ const TreeCanvas: React.FC = () => {
 
   const onNodesChange: OnNodesChange = useCallback(
     (changes) => {
+      if (nodesLocked) return; // ロック中はドラッグを無効化
       // ノードの位置変更を許可（手動調整用）
       const positionChanges = changes.filter(change => change.type === 'position');
       
@@ -98,7 +100,7 @@ const TreeCanvas: React.FC = () => {
         });
       }
     },
-    [setNodes, nodes, updateNodePosition]
+    [setNodes, nodes, updateNodePosition, nodesLocked]
   );
 
   const onEdgesChange: OnEdgesChange = useCallback(

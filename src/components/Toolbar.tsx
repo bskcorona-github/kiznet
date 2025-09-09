@@ -59,6 +59,8 @@ const Toolbar: React.FC<ToolbarProps> = ({
     redo,
     applyAutoLayout,
     applyLayeredLayout,
+    nodesLocked,
+    setNodesLocked,
   } = useFamilyTreeStore();
 
   const { zoomIn, zoomOut, fitView } = useReactFlow();
@@ -147,6 +149,16 @@ const Toolbar: React.FC<ToolbarProps> = ({
             >
               <LayoutGrid className="h-4 w-4" />
               <span>階層整列</span>
+            </Button>
+
+            <Button
+              size="sm"
+              variant={nodesLocked ? "default" : "outline"}
+              onClick={() => setNodesLocked(!nodesLocked)}
+              className="flex items-center space-x-2"
+              title={nodesLocked ? "ノードロック解除" : "ノードをロック（ドラッグ不可）"}
+            >
+              <span>{nodesLocked ? "ロック中" : "ロック"}</span>
             </Button>
 
             {onResetPositions && (

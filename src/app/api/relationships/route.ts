@@ -27,7 +27,7 @@ async function hasCircularReference(parentId: number, childId: number, treeId: n
       .select({ parentId: relationships.parentId })
       .from(relationships)
       .where(and(
-        eq(relationships.treeId, parseInt(treeId)),
+        eq(relationships.treeId, treeId),
         eq(relationships.childId, currentId)
       ));
 

@@ -1,4 +1,5 @@
 import React from "react";
+import { LAYOUT } from "@/shared/config/layout";
 import { EdgeProps, EdgeLabelRenderer, Position } from "reactflow";
 
 const PartnershipEdge: React.FC<EdgeProps> = ({
@@ -14,10 +15,10 @@ const PartnershipEdge: React.FC<EdgeProps> = ({
 }) => {
 
   // 配偶者線をピンクハンドルの外側から描画し、カードに隠れないようにする
-  const STUB = 12; // ハンドル外へ出す長さを短縮
-  const EXTRA = 20; // 夫婦間の水平線の追加延長を短縮（左右に+10pxずつ）
-  const CARD_HEIGHT = 80; // PersonNodeの高さ（h-[80px]）
-  const LINE_OFFSET = 35; // カードの下端からの線の位置オフセットを短縮
+  const STUB = LAYOUT.spouse.stub;
+  const EXTRA = LAYOUT.spouse.extra;
+  const CARD_HEIGHT = LAYOUT.card.height;
+  const LINE_OFFSET = LAYOUT.spouse.lineOffset;
 
   const flipped = !!data?.partnership?.isFlipped;
   // ハンドルの向きはReactFlowから渡されるsourcePosition/targetPositionに依存する。
