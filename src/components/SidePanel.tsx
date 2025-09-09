@@ -32,6 +32,8 @@ const SidePanel: React.FC<SidePanelProps> = ({ isOpen, onClose }) => {
   } = useFamilyTreeStore();
 
   const selectedPerson = selectedNodeId ? getPersonById(selectedNodeId) : null;
+  const [partnershipId, setPartnershipId] = React.useState<number | null>(null);
+  const [isFlipped, setIsFlipped] = React.useState<boolean>(false);
 
   const {
     register,
@@ -97,6 +99,26 @@ const SidePanel: React.FC<SidePanelProps> = ({ isOpen, onClose }) => {
       });
     }
   }, [selectedPerson, reset]);
+
+  // 夫婦向きの取得
+  React.useEffect(() => {
+    (async () => {
+      try {
+        if (!selectedPerson) return;
+        const res = await fetch(`/api/partnerships?treeId=${selectedPerson.treeId}`);
+        if (!res.ok) return;
+        const parts = await res.json();
+        const match = parts.find((p: any) => p.partnerAId && p.partnerBId && (p.partnerAId === selectedPerson.id || p.partnerBId === selectedPerson.id));
+        if (match) {
+          setPartnershipId(match.id);
+          setIsFlipped(!!match.isFlipped);
+        } else {
+          setPartnershipId(null);
+          setIsFlipped(false);
+        }
+      } catch {}
+    })();
+  }, [selectedPerson]);
 
   const onSubmit = async (data: PersonFormData) => {
     if (!selectedNodeId || !selectedPerson) return;
@@ -232,6 +254,31 @@ const SidePanel: React.FC<SidePanelProps> = ({ isOpen, onClose }) => {
               </div>
             </CardContent>
           </Card>
+
+          {/* Partnership */}
+          {partnershipId && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-sm">配偶者設定</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                <label className="flex items-center gap-2 text-sm">
+                  <input type="checkbox" checked={isFlipped} onChange={async (e) => {
+                    const value = e.target.checked;
+                    setIsFlipped(value);
+                    try {
+                      await fetch(`/api/partnerships/${partnershipId}`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ isFlipped: value })
+                      });
+                    } catch {}
+                  }} />
+                  夫婦線の向きを入れ替える（左右反転）
+                </label>
+              </CardContent>
+            </Card>
+          )}
 
           {/* Life Dates */}
           <Card>

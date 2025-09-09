@@ -157,7 +157,7 @@ const SearchPanel: React.FC<SearchPanelProps> = ({ isOpen, onClose }) => {
               <div className="space-y-2 max-h-96 overflow-y-auto">
                 {filteredNodes.map((node) => {
                   const person = node.data.person;
-                  const fullName = `${person.firstName} ${person.lastName || ""}`.trim();
+                  const fullName = `${person.lastName || ""} ${person.firstName}`.trim();
                   
                   return (
                     <div

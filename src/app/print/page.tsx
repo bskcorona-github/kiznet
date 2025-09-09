@@ -221,7 +221,7 @@ export default function PrintPage() {
                       {/* Basic Info */}
                       <div className="flex items-center justify-between mb-3">
                         <h3 className="font-bold text-lg">
-                          {person.firstName} {person.lastName}
+                          {person.lastName} {person.firstName}
                         </h3>
                         <div className="flex items-center space-x-1">
                           {person.sex && (
@@ -282,7 +282,7 @@ export default function PrintPage() {
                             <span className="font-medium">両親: </span>
                             {parents.map((parent, index) => (
                               <span key={parent.id}>
-                                {parent.firstName} {parent.lastName}
+                                {parent.lastName} {parent.firstName}
                                 {index < parents.length - 1 && ", "}
                               </span>
                             ))}
@@ -297,7 +297,7 @@ export default function PrintPage() {
                             <span className="font-medium">配偶者: </span>
                             {partners.map((partner, index) => (
                               <span key={partner.person.id}>
-                                {partner.person.firstName} {partner.person.lastName}
+                                {partner.person.lastName} {partner.person.firstName}
                                 {partner.partnership.type === "marriage" ? " (婚姻)" : " (パートナー)"}
                                 {index < partners.length - 1 && ", "}
                               </span>
@@ -313,7 +313,7 @@ export default function PrintPage() {
                             <span className="font-medium">子供: </span>
                             {children.map((child, index) => (
                               <span key={child.id}>
-                                {child.firstName} {child.lastName}
+                                {child.lastName} {child.firstName}
                                 {index < children.length - 1 && ", "}
                               </span>
                             ))}

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
 import { ReactFlowProvider } from "reactflow";
 import TreeCanvas from "@/components/TreeCanvas";
@@ -12,9 +12,10 @@ import { Card, CardContent } from "@/components/ui/card";
 // SearchPanel と ExportImportDialog は後で復元
 // import SearchPanel from "@/components/SearchPanel";
 // import ExportImportDialog from "@/components/ExportImportDialog";
-import { TreePine, Home, Loader2 } from "lucide-react";
+import { TreePine, Home, Loader2, UserPlus, Database } from "lucide-react";
 import Link from "next/link";
 import { autoLayout } from "@/lib/layout";
+import AddPersonDialog from "@/components/AddPersonDialog";
 
 export default function EditorPage() {
   const searchParams = useSearchParams();
@@ -34,6 +35,13 @@ export default function EditorPage() {
     setCurrentTree,
     setNodes,
     selectNode,
+    undo,
+    redo,
+    canUndo,
+    canRedo,
+    applyAutoLayout,
+    resetAllPositions,
+    saveAllPositions,
   } = useFamilyTreeStore();
 
   // Load tree data
@@ -63,25 +71,133 @@ export default function EditorPage() {
 
   // Open side panel when node is selected
   useEffect(() => {
+    console.log("📱 Side panel effect - selectedNodeId:", selectedNodeId, "nodes count:", nodes.length);
     if (selectedNodeId) {
       setIsSidePanelOpen(true);
     }
-  }, [selectedNodeId]);
+  }, [selectedNodeId, nodes.length]);
 
-  const handleAddPerson = () => {
-    // TODO: Implement add person dialog
-    console.log("Add person");
-  };
+  // 人物削除イベントで最新データを取得
+  useEffect(() => {
+    const handler = async () => {
+      if (treeId) {
+        await loadTreeData(parseInt(treeId));
+        await applyAutoLayout();
+      }
+    };
+    
+    window.addEventListener("kiznet:person-deleted", handler as any);
+    window.addEventListener("kiznet:person-updated", handler as any);
+    
+    return () => {
+      window.removeEventListener("kiznet:person-deleted", handler as any);
+      window.removeEventListener("kiznet:person-updated", handler as any);
+    };
+  }, [treeId, loadTreeData, applyAutoLayout]);
 
-  const handleAutoLayout = async () => {
+  const [isAddOpen, setIsAddOpen] = useState(false);
+  const handleAddPerson = useCallback(() => {
+    setIsAddOpen(true);
+  }, []);
+
+  const handleAutoLayout = useCallback(async () => {
     try {
-      const { nodes: layoutedNodes } = await autoLayout(nodes, edges);
-      setNodes(layoutedNodes);
+      await applyAutoLayout();
     } catch (error) {
       console.error("Auto layout failed:", error);
       alert("自動レイアウトに失敗しました。");
     }
-  };
+  }, [applyAutoLayout]);
+
+  const submitAddPerson = useCallback(async (data: { firstName: string; lastName?: string; sex?: "male"|"female"|"other"|"unknown"; birthOrder?: string; birthDate?: string; }) => {
+    try {
+      if (!treeId) {
+        alert("treeIdがありません。ホームから家系図を開き直してください。");
+        return;
+      }
+      const res = await fetch("/api/people", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ treeId, ...data, isDeceased: false }),
+      });
+      if (!res.ok) throw new Error("Failed to create person");
+      await loadTreeData(parseInt(treeId));
+      // 最新の状態に対して自動整列（ストアの現在値を使用）
+      await applyAutoLayout();
+    } catch (e) {
+      console.error(e);
+      alert("人物の追加に失敗しました");
+    }
+  }, [treeId, loadTreeData, applyAutoLayout]);
+
+  // Keyboard shortcuts
+  const handleKeyDown = useCallback((event: KeyboardEvent) => {
+    // Prevent shortcuts when typing in input fields
+    if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) {
+      return;
+    }
+
+    if (event.ctrlKey || event.metaKey) {
+      switch (event.key) {
+        case 'z':
+          if (event.shiftKey) {
+            // Ctrl+Shift+Z: Redo
+            event.preventDefault();
+            if (canRedo()) {
+              redo();
+            }
+          } else {
+            // Ctrl+Z: Undo
+            event.preventDefault();
+            if (canUndo()) {
+              undo();
+            }
+          }
+          break;
+        case 'f':
+          // Ctrl+F: Fit view
+          event.preventDefault();
+          // TODO: Implement fit view
+          break;
+        case 'a':
+          // Ctrl+A: Add person
+          event.preventDefault();
+          handleAddPerson();
+          break;
+        case 'l':
+          // Ctrl+L: Auto layout
+          event.preventDefault();
+          handleAutoLayout();
+          break;
+        case 's':
+          // Ctrl+S: Save (prevent default browser save)
+          event.preventDefault();
+          // TODO: Implement save
+          break;
+      }
+    }
+
+    if (event.key === 'Escape') {
+      // Escape: Close side panel
+      if (isSidePanelOpen) {
+        setIsSidePanelOpen(false);
+        selectNode(null);
+      }
+    }
+
+    if (event.key === 'Delete' && selectedNodeId) {
+      // Delete: Delete selected node
+      event.preventDefault();
+      // TODO: Implement delete
+    }
+  }, [canUndo, canRedo, undo, redo, isSidePanelOpen, selectNode, selectedNodeId, handleAddPerson, handleAutoLayout]);
+
+  useEffect(() => {
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [handleKeyDown]);
 
   const handleSeedSampleData = async () => {
     if (!treeId) return;
@@ -120,10 +236,13 @@ export default function EditorPage() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center">
-          <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4" />
-          <p>家系図を読み込み中...</p>
+      <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-blue-50 to-white">
+        <div className="text-center p-8 bg-white rounded-lg shadow-lg max-w-md">
+          <div className="p-4 bg-blue-100 rounded-full w-fit mx-auto mb-4">
+            <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+          </div>
+          <h2 className="text-lg font-semibold text-gray-900 mb-2">家系図を読み込み中...</h2>
+          <p className="text-gray-600">データを取得しています。しばらくお待ちください。</p>
         </div>
       </div>
     );
@@ -131,13 +250,26 @@ export default function EditorPage() {
 
   if (error) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center p-8 bg-white rounded-lg shadow-lg max-w-md">
-          <div className="text-red-500 text-xl mb-4">エラーが発生しました</div>
+      <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-red-50 to-white">
+        <div className="text-center p-8 bg-white rounded-lg shadow-lg max-w-md border border-red-200">
+          <div className="p-4 bg-red-100 rounded-full w-fit mx-auto mb-4">
+            <div className="text-red-600 text-2xl">⚠️</div>
+          </div>
+          <h2 className="text-lg font-semibold text-red-900 mb-2">エラーが発生しました</h2>
           <p className="text-gray-600 mb-4">{error}</p>
-          <Link href="/" className="text-blue-600 hover:underline">
-            ホームに戻る
-          </Link>
+          <div className="space-y-2">
+            <Button 
+              onClick={() => window.location.reload()} 
+              className="w-full"
+            >
+              ページを再読み込み
+            </Button>
+            <Link href="/" className="block">
+              <Button variant="outline" className="w-full">
+                ホームに戻る
+              </Button>
+            </Link>
+          </div>
         </div>
       </div>
     );
@@ -147,21 +279,33 @@ export default function EditorPage() {
     <ReactFlowProvider>
       <div className="flex flex-col h-screen">
         {/* Header */}
-        <header className="bg-white border-b border-gray-200 px-4 py-2 flex items-center justify-between">
+        <header className="bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between shadow-sm">
           <div className="flex items-center space-x-4">
-            <Link href="/" className="flex items-center space-x-2 text-blue-600 hover:text-blue-700">
+            <Link 
+              href="/" 
+              className="flex items-center space-x-2 text-blue-600 hover:text-blue-700 transition-colors duration-200 px-3 py-2 rounded-lg hover:bg-blue-50"
+            >
               <Home className="h-5 w-5" />
-              <span>ホーム</span>
+              <span className="font-medium">ホーム</span>
             </Link>
-            <div className="flex items-center space-x-2">
-              <TreePine className="h-6 w-6 text-green-600" />
-              <h1 className="text-xl font-semibold">
-                {currentTree?.name || "家系図エディター"}
-              </h1>
+            <div className="flex items-center space-x-3">
+              <div className="p-2 bg-green-100 rounded-lg">
+                <TreePine className="h-6 w-6 text-green-600" />
+              </div>
+              <div>
+                <h1 className="text-xl font-bold text-gray-900">
+                  {currentTree?.name || "家系図エディター"}
+                </h1>
+                {currentTree?.description && (
+                  <p className="text-sm text-gray-600">{currentTree.description}</p>
+                )}
+              </div>
             </div>
           </div>
-          <div className="text-sm text-gray-600">
-            {nodes.length} 人の情報が登録されています
+          <div className="flex items-center space-x-4">
+            <div className="text-sm text-gray-600 bg-gray-50 px-3 py-2 rounded-lg">
+              <span className="font-medium">{nodes.length}</span> 人の情報が登録されています
+            </div>
           </div>
         </header>
 
@@ -171,6 +315,8 @@ export default function EditorPage() {
           onAddRelationship={() => console.log("Add relationship")}
           onAddPartnership={() => console.log("Add partnership")}
           onAutoLayout={handleAutoLayout}
+          onResetPositions={resetAllPositions}
+          onSavePositions={saveAllPositions}
           onImportData={() => console.log("Import data")}
           onExportData={() => console.log("Export data")}
           onPrint={() => console.log("Print")}
@@ -195,23 +341,35 @@ export default function EditorPage() {
           )}
         </div>
 
+        {/* Add Person Dialog */}
+        <AddPersonDialog open={isAddOpen} onOpenChange={setIsAddOpen} onSubmit={submitAddPerson} />
+
         {/* Empty state */}
         {nodes.length === 0 && !isLoading && (
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-            <Card className="max-w-md pointer-events-auto">
+            <Card className="max-w-md pointer-events-auto shadow-xl border-2 border-dashed border-gray-300">
               <CardContent className="text-center p-8">
-                <TreePine className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                <h3 className="text-lg font-medium text-gray-900 mb-2">
+                <div className="p-4 bg-gray-100 rounded-full w-fit mx-auto mb-4">
+                  <TreePine className="h-12 w-12 text-gray-400" />
+                </div>
+                <h3 className="text-xl font-semibold text-gray-900 mb-2">
                   家系図が空です
                 </h3>
-                <p className="text-gray-600 mb-4">
+                <p className="text-gray-600 mb-6 leading-relaxed">
                   最初の人物を追加するか、サンプルデータを投入して家系図作りを始めましょう
                 </p>
-                <div className="space-y-2">
-                  <Button onClick={handleAddPerson}>
+                <div className="space-y-3">
+                  <Button onClick={handleAddPerson} className="w-full" size="lg">
+                    <UserPlus className="h-4 w-4 mr-2" />
                     人物を追加
                   </Button>
-                  <Button onClick={handleSeedSampleData} variant="outline">
+                  <Button 
+                    onClick={handleSeedSampleData} 
+                    variant="outline" 
+                    className="w-full"
+                    size="lg"
+                  >
+                    <Database className="h-4 w-4 mr-2" />
                     サンプルデータを投入
                   </Button>
                 </div>

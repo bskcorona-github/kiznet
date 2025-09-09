@@ -89,6 +89,36 @@
   stroke: #64748b;
 }
 
+/* レスポンシブデザイン */
+@media (max-width: 768px) {
+  .react-flow__minimap {
+    width: 120px !important;
+    height: 80px !important;
+  }
+  
+  .react-flow__controls {
+    bottom: 10px !important;
+    left: 10px !important;
+  }
+  
+  .react-flow__controls-button {
+    width: 32px !important;
+    height: 32px !important;
+  }
+}
+
+/* タッチデバイス対応 */
+@media (hover: none) and (pointer: coarse) {
+  .react-flow__node {
+    touch-action: none;
+  }
+  
+  .react-flow__handle {
+    width: 12px !important;
+    height: 12px !important;
+  }
+}
+
 /* 印刷用スタイル */
 @media print {
   @page {

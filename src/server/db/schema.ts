@@ -14,6 +14,7 @@ export const people = pgTable("people", {
   firstName: varchar("first_name", { length: 80 }).notNull(),
   lastName: varchar("last_name", { length: 80 }),
   sex: varchar("sex", { length: 10 }), // male|female|other|unknown
+  birthOrder: varchar("birth_order", { length: 20 }), // 長男、次男、三男、長女、次女、三女等
   birthDate: date("birth_date"),
   deathDate: date("death_date"),
   isDeceased: boolean("is_deceased").default(false).notNull(),
@@ -26,6 +27,9 @@ export const people = pgTable("people", {
   lat: varchar("lat", { length: 32 }),
   lng: varchar("lng", { length: 32 }),
   note: varchar("note", { length: 1000 }),
+  // 家系図での表示位置（手動配置の保存用）
+  positionX: integer("position_x"), // React Flowでのx座標
+  positionY: integer("position_y"), // React Flowでのy座標
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -45,6 +49,7 @@ export const partnerships = pgTable("partnerships", {
   treeId: integer("tree_id").notNull(),
   partnerAId: integer("partner_a_id").notNull(),
   partnerBId: integer("partner_b_id").notNull(),
+  isFlipped: boolean("is_flipped").default(false).notNull(),
   startDate: date("start_date"),
   endDate: date("end_date"),
   type: varchar("type", { length: 24 }).default("marriage").notNull(), // marriage|partner

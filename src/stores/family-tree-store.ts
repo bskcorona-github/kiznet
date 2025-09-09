@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { subscribeWithSelector } from "zustand/middleware";
 import { PersonNode, FamilyEdge, Person, Relationship, Partnership, Tree, SearchFilters } from "@/types";
-import { autoLayout } from "@/lib/layout";
+import { autoLayout, generationLayout, elkLayeredLayout } from "@/lib/layout";
 
 interface FamilyTreeState {
   // Current tree and data
@@ -36,13 +36,13 @@ interface FamilyTreeActions {
   loadTreeData: (treeId: number) => Promise<void>;
   
   // Node management
-  setNodes: (nodes: PersonNode[]) => void;
+  setNodes: (nodes: PersonNode[] | ((prev: PersonNode[]) => PersonNode[])) => void;
   addNode: (person: Person) => void;
   updateNode: (id: string, person: Partial<Person>) => void;
   removeNode: (id: string) => void;
   
   // Edge management
-  setEdges: (edges: FamilyEdge[]) => void;
+  setEdges: (edges: FamilyEdge[] | ((prev: FamilyEdge[]) => FamilyEdge[])) => void;
   addEdge: (edge: FamilyEdge) => void;
   removeEdge: (id: string) => void;
   
@@ -52,6 +52,10 @@ interface FamilyTreeActions {
   
   // Layout
   applyAutoLayout: () => Promise<void>;
+  applyLayeredLayout: () => Promise<void>;
+  updateNodePosition: (id: string, position: { x: number; y: number }) => Promise<void>;
+  resetAllPositions: () => Promise<void>;
+  saveAllPositions: () => Promise<void>;
   
   // Search and filter
   setSearchFilters: (filters: Partial<SearchFilters>) => void;
@@ -134,13 +138,25 @@ export const useFamilyTreeStore = create<FamilyTreeStore>()(
           partnerships: partnerships.length
         });
         
-        // Convert to React Flow format
-        const nodes: PersonNode[] = people.map((person) => ({
-          id: person.id.toString(),
-          type: "person" as const,
-          data: { person },
-          position: { x: Math.random() * 400, y: Math.random() * 400 },
-        }));
+        // Convert to React Flow format（既存ノードの座標を保持して画面リセット感を抑制）
+        const prevNodes = get().nodes || [];
+        const prevPosMap = new Map(prevNodes.map(n => [n.id, n.position] as const));
+        const nodes: PersonNode[] = people.map((person) => {
+          // データベースに保存された位置があればそれを使用、なければ前の位置、最後にランダム位置
+          let position: { x: number; y: number };
+          if (person.positionX !== null && person.positionY !== null && person.positionX !== undefined && person.positionY !== undefined) {
+            position = { x: person.positionX, y: person.positionY };
+          } else {
+            position = prevPosMap.get(person.id.toString()) || { x: Math.random() * 400, y: Math.random() * 400 };
+          }
+          
+          return {
+            id: person.id.toString(),
+            type: "person" as const,
+            data: { person },
+            position,
+          };
+        });
 
         const edges: FamilyEdge[] = [
           ...relationships.map((rel): FamilyEdge => ({
@@ -148,6 +164,9 @@ export const useFamilyTreeStore = create<FamilyTreeStore>()(
             source: rel.parentId.toString(),
             target: rel.childId.toString(),
             type: "parent-child",
+            // connect from parent's bottom center to child's top center
+            sourceHandle: "child-connection",
+            targetHandle: "parent-connection",
             data: { relationship: rel },
           })),
           ...partnerships.map((part): FamilyEdge => ({
@@ -155,6 +174,9 @@ export const useFamilyTreeStore = create<FamilyTreeStore>()(
             source: part.partnerAId.toString(),
             target: part.partnerBId.toString(),
             type: "partnership",
+            // isFlipped=true のとき左右のハンドルを入れ替える
+            sourceHandle: part.isFlipped ? "spouse-left-source" : "spouse-right",
+            targetHandle: part.isFlipped ? "spouse-right-target" : "spouse-left",
             data: { partnership: part },
           })),
         ];
@@ -173,6 +195,20 @@ export const useFamilyTreeStore = create<FamilyTreeStore>()(
 
     // Node management
     setNodes: (nodes) => {
+      if (typeof nodes === "function") {
+        const current = get().nodes;
+        const next = nodes(current);
+        if (!Array.isArray(next)) {
+          console.warn("⚠️ setNodes(updater) returned non-array:", next);
+          return;
+        }
+        set({ nodes: next });
+        return;
+      }
+      if (!Array.isArray(nodes)) {
+        console.warn("⚠️ setNodes received non-array:", nodes);
+        return;
+      }
       set({ nodes });
     },
 
@@ -224,6 +260,20 @@ export const useFamilyTreeStore = create<FamilyTreeStore>()(
 
     // Edge management
     setEdges: (edges) => {
+      if (typeof edges === "function") {
+        const current = get().edges;
+        const next = edges(current);
+        if (!Array.isArray(next)) {
+          console.warn("⚠️ setEdges(updater) returned non-array:", next);
+          return;
+        }
+        set({ edges: next });
+        return;
+      }
+      if (!Array.isArray(edges)) {
+        console.warn("⚠️ setEdges received non-array:", edges);
+        return;
+      }
       set({ edges });
     },
 
@@ -271,6 +321,107 @@ export const useFamilyTreeStore = create<FamilyTreeStore>()(
       }
     },
 
+    applyLayeredLayout: async () => {
+      const { nodes, edges } = get();
+      set({ isLoading: true });
+      try {
+        const { nodes: nn, edges: ee } = await elkLayeredLayout(nodes, edges);
+        set({ nodes: nn, edges: ee, isLoading: false });
+        get().saveToHistory();
+      } catch (e) {
+        console.error("Layered layout failed:", e);
+        set({ isLoading: false });
+      }
+    },
+
+    updateNodePosition: async (id, position) => {
+      const { nodes } = get();
+      
+      // まずローカルで位置を更新
+      const updatedNodes = nodes.map((node) =>
+        node.id === id ? { ...node, position } : node
+      );
+      set({ nodes: updatedNodes });
+
+      try {
+        // サーバーに位置を保存
+        const response = await fetch(`/api/people/${id}/position`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            positionX: position.x,
+            positionY: position.y,
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error("Failed to save position");
+        }
+
+        console.log(`📍 Position saved for person ${id}: (${position.x}, ${position.y})`);
+      } catch (error) {
+        console.error("Failed to save position:", error);
+        // エラーが発生してもUI上では位置は更新されたままにする
+      }
+    },
+
+    resetAllPositions: async () => {
+      const { nodes, currentTree } = get();
+      if (!currentTree) return;
+
+      set({ isLoading: true });
+
+      try {
+        // すべてのノードの位置をnullにリセット
+        const resetPromises = nodes.map(async (node) => {
+          const response = await fetch(`/api/people/${node.id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              firstName: node.data.person.firstName, // 必須フィールド
+              positionX: null,
+              positionY: null,
+            }),
+          });
+
+          if (!response.ok) {
+            throw new Error(`Failed to reset position for person ${node.id}`);
+          }
+        });
+
+        await Promise.all(resetPromises);
+
+        // データを再読み込みして自動レイアウトを適用
+        await get().loadTreeData(currentTree.id);
+        await get().applyAutoLayout();
+
+        console.log("📍 All positions reset and auto layout applied");
+      } catch (error) {
+        console.error("Failed to reset positions:", error);
+        set({ error: "位置のリセットに失敗しました", isLoading: false });
+      }
+    },
+
+    saveAllPositions: async () => {
+      const { nodes } = get();
+      if (!Array.isArray(nodes) || nodes.length === 0) return;
+
+      try {
+        const promises = nodes.map(async (node) => {
+          const res = await fetch(`/api/people/${node.id}/position`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ positionX: node.position.x, positionY: node.position.y })
+          });
+          if (!res.ok) throw new Error(`Failed to save position for ${node.id}`);
+        });
+        await Promise.all(promises);
+        console.log("💾 All node positions saved.");
+      } catch (e) {
+        console.error("Failed to save all positions", e);
+      }
+    },
+
     // Search and filter
     setSearchFilters: (filters) => {
       set({ 
@@ -289,7 +440,7 @@ export const useFamilyTreeStore = create<FamilyTreeStore>()(
         
         // Name filter
         if (searchFilters.name) {
-          const fullName = `${person.firstName} ${person.lastName || ""}`.toLowerCase();
+          const fullName = `${person.lastName || ""} ${person.firstName}`.toLowerCase();
           const searchTerm = searchFilters.name.toLowerCase();
           if (!fullName.includes(searchTerm)) {
             return false;

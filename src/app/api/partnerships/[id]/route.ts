@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/server/db/client";
 import { partnerships } from "@/server/db/schema";
 import { PartnershipSchema } from "@/types";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 
 interface Props {
   params: { id: string };
@@ -14,6 +14,9 @@ export async function GET(request: NextRequest, { params }: Props) {
     if (isNaN(id)) {
       return NextResponse.json({ error: "Invalid ID" }, { status: 400 });
     }
+
+    // Ensure column exists
+    await db.execute(sql`ALTER TABLE partnerships ADD COLUMN IF NOT EXISTS is_flipped boolean NOT NULL DEFAULT false`);
 
     const [partnership] = await db
       .select()
@@ -44,12 +47,16 @@ export async function PUT(request: NextRequest, { params }: Props) {
     const body = await request.json();
     const validatedData = PartnershipSchema.partial().parse(body);
 
+    // Ensure column exists
+    await db.execute(sql`ALTER TABLE partnerships ADD COLUMN IF NOT EXISTS is_flipped boolean NOT NULL DEFAULT false`);
+
     const [updatedPartnership] = await db
       .update(partnerships)
       .set({
-        ...(validatedData.startDate && { startDate: validatedData.startDate }),
-        ...(validatedData.endDate && { endDate: validatedData.endDate }),
-        ...(validatedData.type && { type: validatedData.type }),
+        ...(validatedData.startDate !== undefined && { startDate: validatedData.startDate || null }),
+        ...(validatedData.endDate !== undefined && { endDate: validatedData.endDate || null }),
+        ...(validatedData.type !== undefined && { type: validatedData.type }),
+        ...(validatedData.isFlipped !== undefined && { isFlipped: validatedData.isFlipped }),
       })
       .where(eq(partnerships.id, id))
       .returning();

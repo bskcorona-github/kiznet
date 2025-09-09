@@ -15,6 +15,7 @@ export type Person = {
   firstName: string;
   lastName?: string | null;
   sex?: "male" | "female" | "other" | "unknown" | null;
+  birthOrder?: string | null; // 長男、次男、三男、長女、次女、三女等
   birthDate?: string | null;
   deathDate?: string | null;
   isDeceased: boolean;
@@ -27,6 +28,9 @@ export type Person = {
   lat?: string | null;
   lng?: string | null;
   note?: string | null;
+  // 家系図での表示位置（手動配置の保存用）
+  positionX?: number | null;
+  positionY?: number | null;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -44,6 +48,7 @@ export type Partnership = {
   treeId: number;
   partnerAId: number;
   partnerBId: number;
+  isFlipped?: boolean; // 夫婦線の向きを反転（A:左/B:右）
   startDate?: string | null;
   endDate?: string | null;
   type: "marriage" | "partner";
@@ -67,6 +72,9 @@ export type FamilyEdge = {
   source: string;
   target: string;
   type?: "parent-child" | "partnership";
+  // precise handle connections for exact alignment to node handles
+  sourceHandle?: string;
+  targetHandle?: string;
   data?: {
     relationship?: Relationship;
     partnership?: Partnership;
@@ -76,20 +84,28 @@ export type FamilyEdge = {
 // Form validation schemas
 export const PersonSchema = z.object({
   firstName: z.string().min(1, "名前を入力してください").max(80),
-  lastName: z.string().max(80).optional(),
-  sex: z.enum(["male", "female", "other", "unknown"]).optional(),
-  birthDate: z.string().optional(),
-  deathDate: z.string().optional(),
+  lastName: z.string().max(80).nullable().optional(),
+  sex: z.enum(["male", "female", "other", "unknown"]).nullable().optional(),
+  birthOrder: z.string().max(20).nullable().optional(), // 長男、次男、三男、長女、次女、三女等
+  birthDate: z.string().nullable().optional(),
+  deathDate: z.string().nullable().optional(),
   isDeceased: z.boolean().default(false),
-  email: z.string().email("有効なメールアドレスを入力してください").max(160).optional().or(z.literal("")),
-  phone: z.string().max(40).optional(),
-  address: z.string().max(240).optional(),
-  city: z.string().max(120).optional(),
-  prefecture: z.string().max(120).optional(),
-  country: z.string().max(120).optional(),
-  lat: z.string().max(32).optional(),
-  lng: z.string().max(32).optional(),
-  note: z.string().max(1000).optional(),
+  email: z.union([
+    z.string().email("有効なメールアドレスを入力してください").max(160),
+    z.literal(""),
+    z.null()
+  ]).optional(),
+  phone: z.string().max(40).nullable().optional(),
+  address: z.string().max(240).nullable().optional(),
+  city: z.string().max(120).nullable().optional(),
+  prefecture: z.string().max(120).nullable().optional(),
+  country: z.string().max(120).nullable().optional(),
+  lat: z.string().max(32).nullable().optional(),
+  lng: z.string().max(32).nullable().optional(),
+  note: z.string().max(1000).nullable().optional(),
+  // 家系図での表示位置
+  positionX: z.number().nullable().optional(),
+  positionY: z.number().nullable().optional(),
 });
 
 export const TreeSchema = z.object({
@@ -105,6 +121,7 @@ export const RelationshipSchema = z.object({
 export const PartnershipSchema = z.object({
   partnerAId: z.number(),
   partnerBId: z.number(),
+  isFlipped: z.boolean().optional(),
   startDate: z.string().optional(),
   endDate: z.string().optional(),
   type: z.enum(["marriage", "partner"]).default("marriage"),

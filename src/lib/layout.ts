@@ -1,8 +1,189 @@
 import { PersonNode, FamilyEdge } from "@/types";
 import { Node, Edge } from "reactflow";
+import { improvedFamilyTreeLayout } from "./improved-layout";
 
 // Dynamic import for elkjs to avoid SSR issues
 let elk: any = null;
+
+// ELK を用いた階層レイアウト（高品質）
+export async function elkLayeredLayout(
+  nodes: PersonNode[],
+  edges: FamilyEdge[]
+): Promise<{ nodes: PersonNode[]; edges: FamilyEdge[] }> {
+  if (!Array.isArray(nodes) || !Array.isArray(edges) || nodes.length === 0) {
+    return { nodes, edges };
+  }
+
+  try {
+    if (!elk) {
+      // 動的読み込み（SSR回避）
+      const Elk = (await import("elkjs/lib/elk.bundled.js")).default as any;
+      elk = new Elk();
+    }
+
+    const elkGraph = convertToElkGraph(nodes, edges);
+    const result = await elk.layout(elkGraph);
+    let layoutedNodes = applyElkLayout(result, nodes);
+
+    // ELKは交差最小化を優先するため、兄弟が離れることがある
+    // 兄弟（同じ親または同じ夫婦の子）を同じ列ブロックに再整列する
+    layoutedNodes = alignSiblingsAfterElk(layoutedNodes, edges);
+    // 親（および夫婦）を子どもの重心に合わせて上から順に揃える
+    layoutedNodes = alignAncestorsToChildrenCenters(layoutedNodes, edges);
+
+    // エッジは既存のものをそのまま返す（描画は座標に追従）
+    return { nodes: layoutedNodes, edges };
+  } catch (error) {
+    console.warn("ELK layered layout failed, falling back to generationLayout:", error);
+    return generationLayout(nodes, edges);
+  }
+}
+
+// 兄弟を同じ列ブロックに寄せる（ELK後の後処理）
+function alignSiblingsAfterElk(
+  nodes: PersonNode[],
+  edges: FamilyEdge[]
+): PersonNode[] {
+  const nodeMap = new Map(nodes.map(n => [n.id, n]));
+  const partnerships = new Map<string, string>();
+  const parentChildren = new Map<string, string[]>();
+
+  edges.forEach(e => {
+    if (e.type === "partnership") {
+      partnerships.set(e.source, e.target);
+      partnerships.set(e.target, e.source);
+    } else if (e.type === "parent-child") {
+      const arr = parentChildren.get(e.source) || [];
+      arr.push(e.target);
+      parentChildren.set(e.source, arr);
+    }
+  });
+
+  const processedChildren = new Set<string>();
+  const CHILD_SPACING = 220; // カード幅(180) + 余白
+
+  // 夫婦単位で子どもを再整列
+  partnerships.forEach((partnerId, parentId) => {
+    if (parseInt(parentId) > parseInt(partnerId)) return; // 重複回避
+
+    const children = new Set<string>();
+    (parentChildren.get(parentId) || []).forEach(c => children.add(c));
+    (parentChildren.get(partnerId) || []).forEach(c => children.add(c));
+
+    if (children.size === 0) return;
+
+    const left = nodeMap.get(parentId);
+    const right = nodeMap.get(partnerId);
+    if (!left || !right) return;
+
+    // 中心X（夫婦の中点）
+    const centerX = (left.position.x + right.position.x) / 2;
+
+    const childIds = Array.from(children);
+    // 生年月日・続柄で安定ソート（既存関数を利用）
+    const sorted = sortSiblingsByBirthAndSex(childIds, nodes as any);
+
+    sorted.forEach((childId, idx) => {
+      const child = nodeMap.get(childId);
+      if (!child) return;
+      const offset = (idx - (sorted.length - 1) / 2) * CHILD_SPACING;
+      child.position = { x: Math.round(centerX + offset), y: child.position.y };
+      processedChildren.add(childId);
+    });
+  });
+
+  // 片親のみのケースも整列
+  parentChildren.forEach((children, parentId) => {
+    const partnerId = partnerships.get(parentId);
+    if (partnerId) return; // 夫婦側で処理済み
+    if (children.length === 0) return;
+    const parent = nodeMap.get(parentId);
+    if (!parent) return;
+
+    const remaining = children.filter(c => !processedChildren.has(c));
+    if (remaining.length === 0) return;
+
+    const sorted = sortSiblingsByBirthAndSex(remaining, nodes as any);
+    const centerX = parent.position.x;
+    sorted.forEach((childId, idx) => {
+      const child = nodeMap.get(childId);
+      if (!child) return;
+      const offset = (idx - (sorted.length - 1) / 2) * CHILD_SPACING;
+      child.position = { x: Math.round(centerX + offset), y: child.position.y };
+    });
+  });
+
+  return nodes.map(n => nodeMap.get(n.id) || n);
+}
+
+// 親（および夫婦）を子どもの重心に合わせて上流へ伝播する
+function alignAncestorsToChildrenCenters(
+  nodes: PersonNode[],
+  edges: FamilyEdge[]
+): PersonNode[] {
+  const nodeMap = new Map(nodes.map(n => [n.id, { ...n }]));
+  const parentChildren = new Map<string, string[]>();
+  const childParents = new Map<string, string[]>();
+  const partnerships = new Map<string, string>();
+
+  edges.forEach(e => {
+    if (e.type === "parent-child") {
+      const arr = parentChildren.get(e.source) || [];
+      arr.push(e.target);
+      parentChildren.set(e.source, arr);
+      const parr = childParents.get(e.target) || [];
+      parr.push(e.source);
+      childParents.set(e.target, parr);
+    } else if (e.type === "partnership") {
+      partnerships.set(e.source, e.target);
+      partnerships.set(e.target, e.source);
+    }
+  });
+
+  // 深さ（世代）計算: 親が無いノードからBFS
+  const depth = new Map<string, number>();
+  const roots = nodes.filter(n => !childParents.has(n.id)).map(n => n.id);
+  const q: Array<{ id: string; d: number }> = roots.map(id => ({ id, d: 0 }));
+  while (q.length) {
+    const { id, d } = q.shift()!;
+    if (depth.has(id)) continue;
+    depth.set(id, d);
+    (parentChildren.get(id) || []).forEach(c => q.push({ id: c, d: d + 1 }));
+  }
+
+  // 深い世代から親方向へ順に処理
+  const parents = Array.from(parentChildren.keys()).sort((a, b) => (depth.get(b) ?? 0) - (depth.get(a) ?? 0));
+
+  const COUPLE_DISTANCE = 70; // improved-layout と整合
+
+  const processedCouple = new Set<string>();
+
+  parents.forEach(pid => {
+    const kids = (parentChildren.get(pid) || []).map(id => nodeMap.get(id)).filter(Boolean) as PersonNode[];
+    if (kids.length === 0) return;
+    const centerX = kids.reduce((s, c) => s + c.position.x, 0) / kids.length;
+
+    const partnerId = partnerships.get(pid);
+    const p = nodeMap.get(pid);
+    if (!p) return;
+
+    if (partnerId) {
+      const key = pid < partnerId ? pid + "-" + partnerId : partnerId + "-" + pid;
+      if (processedCouple.has(key)) return;
+      const sp = nodeMap.get(partnerId);
+      if (!sp) return;
+      const half = COUPLE_DISTANCE / 2;
+      // 左右どちらが左かに関わらず、中心に対して左右に配置
+      p.position = { x: Math.round(centerX - half), y: p.position.y };
+      sp.position = { x: Math.round(centerX + half), y: sp.position.y };
+      processedCouple.add(key);
+    } else {
+      p.position = { x: Math.round(centerX), y: p.position.y };
+    }
+  });
+
+  return nodes.map(n => nodeMap.get(n.id) || n);
+}
 
 // React FlowのノードとエッジをELK形式に変換
 function convertToElkGraph(nodes: PersonNode[], edges: FamilyEdge[]) {
@@ -14,7 +195,7 @@ function convertToElkGraph(nodes: PersonNode[], edges: FamilyEdge[]) {
     labels: [
       {
         id: `${node.id}-label`,
-        text: `${node.data.person.firstName} ${node.data.person.lastName || ""}`.trim(),
+        text: `${node.data.person.lastName || ""} ${node.data.person.firstName}`.trim(),
         width: 160,
         height: 20,
       },
@@ -87,12 +268,24 @@ export async function autoLayout(
   edges: FamilyEdge[]
 ): Promise<{ nodes: PersonNode[]; edges: FamilyEdge[] }> {
   try {
+    console.log("🏠 Family Tree Layout - Starting with:", { nodes: nodes.length, edges: edges.length });
+    
+    // 配列チェックを追加
+    if (!Array.isArray(nodes) || !Array.isArray(edges)) {
+      console.warn("⚠️ autoLayout received non-array:", { nodes: typeof nodes, edges: typeof edges });
+      return { nodes: [], edges: [] };
+    }
+    
     if (nodes.length === 0) {
       return { nodes, edges };
     }
 
-    // 家系図専用のレイアウトを使用
-    return familyTreeLayout(nodes, edges);
+    // 改善レイアウト
+    const result = improvedFamilyTreeLayout(nodes, edges);
+    // 兄弟を親（または夫婦）の中点に揃える後処理を常に実施
+    let aligned = alignSiblingsAfterElk(result.nodes, edges);
+    aligned = alignAncestorsToChildrenCenters(aligned, edges);
+    return { nodes: aligned, edges: result.edges };
   } catch (error) {
     console.error("Auto layout failed:", error);
     // Fallback to generation layout
@@ -100,11 +293,17 @@ export async function autoLayout(
   }
 }
 
-// 家系図専用レイアウト関数
+// 家系図専用レイアウト関数（改善版）
 export function familyTreeLayout(
   nodes: PersonNode[],
   edges: FamilyEdge[]
 ): { nodes: PersonNode[]; edges: FamilyEdge[] } {
+  // 配列チェックを追加
+  if (!Array.isArray(nodes) || !Array.isArray(edges)) {
+    console.warn("⚠️ familyTreeLayout received non-array:", { nodes: typeof nodes, edges: typeof edges });
+    return { nodes: [], edges: [] };
+  }
+  
   if (nodes.length === 0) return { nodes, edges };
 
   console.log("🏠 Family Tree Layout - Starting with:", {
@@ -227,7 +426,7 @@ export function familyTreeLayout(
 
   // ルートノード（親がいないノード）から開始
   const rootNodes = nodes.filter(node => !childParentMap.has(node.id));
-  console.log("🌱 Root nodes found:", rootNodes.map(n => `${n.data.person.firstName} ${n.data.person.lastName}`));
+  console.log("🌱 Root nodes found:", rootNodes.map(n => `${n.data.person.lastName || ""} ${n.data.person.firstName}`));
 
   // ルートノードを世代0に設定
   rootNodes.forEach(node => {
@@ -311,16 +510,17 @@ export function familyTreeLayout(
     generationGroups.set(generation, group);
   });
 
-  // 理想的な家系図レイアウト計算
-  const NODE_WIDTH = 180;
-  const NODE_HEIGHT = 120;
-  const COUPLE_SPACING = NODE_WIDTH + 40; // 夫婦間の距離を適度に調整
-  const FAMILY_SPACING = 350; // 家族間の距離を最適化
-  const GENERATION_HEIGHT = 280; // 世代間をさらに広げる
-  const CHILD_SPACING = NODE_WIDTH + 60; // 子ども間の距離を調整
-  const SOLO_NODE_SPACING = NODE_WIDTH + 120; // 単独ノード間の距離
-  const MARGIN_X = 200; // 左右のマージンを広げる
-  const MARGIN_Y = 120; // 上下のマージンを広げる
+  // 理想的な家系図レイアウト計算（コンパクト版）
+  const NODE_WIDTH = 200; // 実際のカード幅に合わせる
+  const NODE_HEIGHT = 140; // 実際のカード高さに合わせる
+  const COUPLE_SPACING = NODE_WIDTH + 30; // 夫婦間の距離を縮小（60→30）
+  const FAMILY_SPACING = 280; // 家族間の距離を縮小（420→280）
+  const GENERATION_HEIGHT = 200; // 世代間の垂直距離を縮小（320→200）
+  const CHILD_SPACING = NODE_WIDTH + 60; // 子ども間の距離を縮小（100→60）
+  const SOLO_NODE_SPACING = NODE_WIDTH + 80; // 単独ノード間の距離を縮小（160→80）
+  const MARGIN_X = 120; // 左右のマージンを縮小（240→120）
+  const MARGIN_Y = 80; // 上下のマージンを縮小（140→80）
+  const MIN_NODE_GAP = 30; // 同一世代での最小余白を縮小（40→30）
 
   // 世代ごとの家族を整理（改善版）
   const familyByGeneration = new Map<number, FamilyUnit[]>();
@@ -367,7 +567,7 @@ export function familyTreeLayout(
     
     const totalSpacing = (families.length - 1) * FAMILY_SPACING;
     const generationTotalWidth = totalFamiliesWidth + totalSpacing;
-    const generationStartX = MARGIN_X + (1200 - MARGIN_X * 2 - generationTotalWidth) / 2; // 固定幅1200pxで中央揃え
+    const generationStartX = MARGIN_X + Math.max(0, (1400 - MARGIN_X * 2 - generationTotalWidth) / 2); // 固定幅1400pxで中央揃え
 
     let currentX = generationStartX;
 
@@ -429,8 +629,9 @@ export function familyTreeLayout(
           const parentIndex = family.parents.indexOf(node.id);
           x = layout.parentsStartX + parentIndex * COUPLE_SPACING;
         } else if (family.children.includes(node.id)) {
-          // 子どもの配置  
-          const childIndex = family.children.indexOf(node.id);
+          // 子どもの配置（並び順を考慮）
+          const sortedChildren = sortSiblingsByBirthAndSex(family.children, nodes);
+          const childIndex = sortedChildren.indexOf(node.id);
           x = layout.childrenStartX + childIndex * CHILD_SPACING;
         }
       } else {
@@ -470,8 +671,50 @@ export function familyTreeLayout(
     };
   });
 
+  // 同一世代のノードの水平重なりを解消（右方向にずらす）
+  const resolveOverlaps = (inputNodes: PersonNode[]): PersonNode[] => {
+    const groups = new Map<number, PersonNode[]>();
+    inputNodes.forEach(n => {
+      const bucket = Math.round((n.position.y - MARGIN_Y) / GENERATION_HEIGHT);
+      const arr = groups.get(bucket) || [];
+      arr.push(n);
+      groups.set(bucket, arr);
+    });
+
+    const output: PersonNode[] = [];
+    groups.forEach((arr) => {
+      // x昇順で並べ替え
+      const sorted = arr.slice().sort((a, b) => a.position.x - b.position.x);
+      let cursorX = -Infinity;
+      sorted.forEach((n) => {
+        let newX = n.position.x;
+        if (cursorX === -Infinity) {
+          cursorX = newX + NODE_WIDTH + MIN_NODE_GAP;
+        } else {
+          if (newX < cursorX) {
+            newX = cursorX;
+          }
+          cursorX = newX + NODE_WIDTH + MIN_NODE_GAP;
+        }
+        output.push({ ...n, position: { x: Math.round(newX), y: n.position.y } });
+      });
+    });
+
+    // バケツに含まれないノード（理論上無い）も含める保険
+    if (output.length !== inputNodes.length) {
+      const included = new Set(output.map(n => n.id));
+      inputNodes.forEach(n => {
+        if (!included.has(n.id)) output.push(n);
+      });
+    }
+
+    return output;
+  };
+
+  const separatedNodes = resolveOverlaps(layoutedNodes);
+
   // 改良されたエッジを生成
-  const improvedEdges = createFamilyTreeEdges(layoutedNodes, edges, partnerships, parentChildMap);
+  const improvedEdges = createFamilyTreeEdges(separatedNodes, edges, partnerships, parentChildMap);
 
   console.log("🏠 Family Tree Layout - Completed:", {
     partnerships: partnerships.size,
@@ -485,11 +728,85 @@ export function familyTreeLayout(
         children: f.children.length
       }))
     })),
-    outputNodes: layoutedNodes.length,
+    outputNodes: separatedNodes.length,
     outputEdges: improvedEdges.length
   });
 
   return { nodes: layoutedNodes, edges: improvedEdges };
+}
+
+/**
+ * 兄弟姉妹を生年月日と性別で並び順ソート
+ * 男性優先、生年月日昇順
+ */
+function sortSiblingsByBirthAndSex(childrenIds: string[], nodes: PersonNode[]): string[] {
+  const nodeMap = new Map(nodes.map(n => [n.id, n]));
+  
+  return childrenIds.slice().sort((aId, bId) => {
+    const nodeA = nodeMap.get(aId);
+    const nodeB = nodeMap.get(bId);
+    
+    if (!nodeA || !nodeB) return 0;
+    
+    const personA = nodeA.data.person;
+    const personB = nodeB.data.person;
+    
+    // 1. 続柄による並び順（長男、次男、三男、長女、次女、三女の順）
+    const birthOrderA = personA.birthOrder || "";
+    const birthOrderB = personB.birthOrder || "";
+    
+    // 続柄の優先順位を定義
+    const getBirthOrderPriority = (birthOrder: string, sex: string) => {
+      if (!birthOrder) return 1000; // 続柄がない場合は最後
+      
+      // 男性の続柄
+      if (birthOrder.includes("長男")) return 1;
+      if (birthOrder.includes("次男")) return 2;
+      if (birthOrder.includes("三男")) return 3;
+      if (birthOrder.includes("四男")) return 4;
+      if (birthOrder.includes("五男")) return 5;
+      if (birthOrder.match(/[六七八九十]男/)) return 6;
+      
+      // 女性の続柄
+      if (birthOrder.includes("長女")) return 11;
+      if (birthOrder.includes("次女")) return 12;
+      if (birthOrder.includes("三女")) return 13;
+      if (birthOrder.includes("四女")) return 14;
+      if (birthOrder.includes("五女")) return 15;
+      if (birthOrder.match(/[六七八九十]女/)) return 16;
+      
+      // その他の続柄
+      if (sex === "male") return 100; // 男性だが続柄不明
+      if (sex === "female") return 200; // 女性だが続柄不明
+      return 300; // 性別・続柄ともに不明
+    };
+    
+    const priorityA = getBirthOrderPriority(birthOrderA, personA.sex || "");
+    const priorityB = getBirthOrderPriority(birthOrderB, personB.sex || "");
+    
+    if (priorityA !== priorityB) {
+      return priorityA - priorityB;
+    }
+    
+    // 2. 続柄が同じ場合は生年月日による並び順
+    const birthA = personA.birthDate ? new Date(personA.birthDate) : null;
+    const birthB = personB.birthDate ? new Date(personB.birthDate) : null;
+    
+    // 生年月日が両方ある場合
+    if (birthA && birthB) {
+      return birthA.getTime() - birthB.getTime();
+    }
+    
+    // 生年月日がある方を先に
+    if (birthA && !birthB) return -1;
+    if (!birthA && birthB) return 1;
+    
+    // 両方とも生年月日がない場合は名前順
+    const fullNameA = `${personA.lastName || ""} ${personA.firstName}`.trim();
+    const fullNameB = `${personB.lastName || ""} ${personB.firstName}`.trim();
+    
+    return fullNameA.localeCompare(fullNameB, 'ja');
+  });
 }
 
 // 改善された家系図用エッジ生成
@@ -509,12 +826,12 @@ function createFamilyTreeEdges(
     parentChildRelations: parentChildMap.size
   });
 
-  // パートナーシップエッジを追加（表示用）
+  // パートナーシップエッジを追加（そのまま描画に使用）
   originalEdges.forEach(edge => {
     if (edge.type === "partnership") {
+      const { style, ...rest } = edge as any;
       improvedEdges.push({
-        ...edge,
-        style: { stroke: "transparent" } // 非表示（FamilyEdgeで描画するため）
+        ...(rest as any),
       });
     }
   });
@@ -577,6 +894,12 @@ export function generationLayout(
   nodes: PersonNode[],
   edges: FamilyEdge[]
 ): { nodes: PersonNode[]; edges: FamilyEdge[] } {
+  // 配列チェックを追加
+  if (!Array.isArray(nodes) || !Array.isArray(edges)) {
+    console.warn("⚠️ generationLayout received non-array:", { nodes: typeof nodes, edges: typeof edges });
+    return { nodes: [], edges: [] };
+  }
+  
   if (nodes.length === 0) return { nodes, edges };
 
   // 親子関係から世代を計算

@@ -71,7 +71,28 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const validatedData = PersonSchema.parse(personData);
+    // 空文字列をnullに変換してからバリデーション
+    const processedData = {
+      ...personData,
+      lastName: personData.lastName === "" ? null : personData.lastName,
+      sex: personData.sex === "" ? null : personData.sex,
+      birthOrder: personData.birthOrder === "" ? null : personData.birthOrder,
+      birthDate: personData.birthDate === "" ? null : personData.birthDate,
+      deathDate: personData.deathDate === "" ? null : personData.deathDate,
+      email: personData.email === "" ? null : personData.email,
+      phone: personData.phone === "" ? null : personData.phone,
+      address: personData.address === "" ? null : personData.address,
+      city: personData.city === "" ? null : personData.city,
+      prefecture: personData.prefecture === "" ? null : personData.prefecture,
+      country: personData.country === "" ? null : personData.country,
+      lat: personData.lat === "" ? null : personData.lat,
+      lng: personData.lng === "" ? null : personData.lng,
+      note: personData.note === "" ? null : personData.note,
+      positionX: personData.positionX,
+      positionY: personData.positionY,
+    };
+    
+    const validatedData = PersonSchema.parse(processedData);
 
     const [newPerson] = await db
       .insert(people)
@@ -80,6 +101,7 @@ export async function POST(request: NextRequest) {
         firstName: validatedData.firstName,
         lastName: validatedData.lastName || null,
         sex: validatedData.sex || null,
+        birthOrder: validatedData.birthOrder || null,
         birthDate: validatedData.birthDate || null,
         deathDate: validatedData.deathDate || null,
         isDeceased: validatedData.isDeceased,
@@ -92,6 +114,8 @@ export async function POST(request: NextRequest) {
         lat: validatedData.lat || null,
         lng: validatedData.lng || null,
         note: validatedData.note || null,
+        positionX: validatedData.positionX || null,
+        positionY: validatedData.positionY || null,
         updatedAt: new Date(),
       })
       .returning();

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/server/db/client";
 import { partnerships, people } from "@/server/db/schema";
+import { sql } from "drizzle-orm";
 import { PartnershipSchema } from "@/types";
 import { eq, and, or } from "drizzle-orm";
 
@@ -15,6 +16,9 @@ export async function GET(request: NextRequest) {
         { status: 400 }
       );
     }
+
+    // Ensure new column exists (for environments without migrations)
+    await db.execute(sql`ALTER TABLE partnerships ADD COLUMN IF NOT EXISTS is_flipped boolean NOT NULL DEFAULT false`);
 
     const allPartnerships = await db
       .select()
@@ -44,7 +48,7 @@ export async function POST(request: NextRequest) {
     }
 
     const validatedData = PartnershipSchema.parse(partnershipData);
-    let { partnerAId, partnerBId } = validatedData;
+    let { partnerAId, partnerBId, isFlipped } = validatedData;
 
     // 自己参照チェック
     if (partnerAId === partnerBId) {
@@ -106,6 +110,7 @@ export async function POST(request: NextRequest) {
         treeId: parseInt(treeId),
         partnerAId,
         partnerBId,
+        isFlipped: !!isFlipped,
         startDate: validatedData.startDate || null,
         endDate: validatedData.endDate || null,
         type: validatedData.type,
