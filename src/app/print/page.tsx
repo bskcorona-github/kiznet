@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { Person, Relationship, Partnership, Tree } from "@/types";
 import { Card, CardContent } from "@/components/ui/card";
@@ -16,7 +16,7 @@ interface PrintPageData {
   partnerships: Partnership[];
 }
 
-export default function PrintPage() {
+function PrintPageInner() {
   const searchParams = useSearchParams();
   const treeId = searchParams?.get("treeId");
   
@@ -386,5 +386,13 @@ export default function PrintPage() {
         }
       `}</style>
     </div>
+  );
+}
+
+export default function PrintPage() {
+  return (
+    <Suspense fallback={<div className="p-6">印刷データを準備中...</div>}>
+      <PrintPageInner />
+    </Suspense>
   );
 }

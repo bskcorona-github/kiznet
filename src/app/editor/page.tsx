@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { ReactFlowProvider } from "reactflow";
 import TreeCanvas from "@/components/TreeCanvas";
@@ -17,7 +17,7 @@ import Link from "next/link";
 import { autoLayout } from "@/lib/layout";
 import AddPersonDialog from "@/components/AddPersonDialog";
 
-export default function EditorPage() {
+function EditorPageInner() {
   const searchParams = useSearchParams();
   const treeId = searchParams?.get("treeId");
   const isDemo = searchParams?.get("demo") === "true";
@@ -379,5 +379,13 @@ export default function EditorPage() {
         )}
       </div>
     </ReactFlowProvider>
+  );
+}
+
+export default function EditorPage() {
+  return (
+    <Suspense fallback={<div className="p-6">読み込み中...</div>}>
+      <EditorPageInner />
+    </Suspense>
   );
 }

@@ -87,59 +87,59 @@ const FamilyEdge: React.FC<EdgeProps> = ({
     let pathElements = [];
 
     if (partnerNode) {
-      // 配偶者がいる場合：正確な接続点で家系図の線を描画
+      // 配偶者がいる場合：PartnershipEdgeと完全に同じ計算ロジックを使用
 
-      // 左右の配偶者を判定（X座標で比較）
-      const leftNode = sourceNode.position.x < partnerNode.position.x ? sourceNode : partnerNode;
-      const rightNode = sourceNode.position.x < partnerNode.position.x ? partnerNode : sourceNode;
+      // 夫婦エッジを特定
+      const partnershipEdge = edges.find(e => e.type === "partnership" && 
+        ((e.source === sourceNode.id && e.target === partnerNode.id) || 
+         (e.source === partnerNode.id && e.target === sourceNode.id)));
 
-      // 正確な接続点を計算（spouse-right / spouse-left の中心）
-      const lWidth = (leftNode as any).width ?? DEFAULT_WIDTH;
-      const lHeight = (leftNode as any).height ?? DEFAULT_HEIGHT;
-      const rWidth = (rightNode as any).width ?? DEFAULT_WIDTH;
-      const rHeight = (rightNode as any).height ?? DEFAULT_HEIGHT;
-
-      // 夫婦エッジのsource/targetの向きに応じた接続点（isFlippedを考慮）
-      const flipped = coupleEdge?.data?.partnership?.isFlipped;
-      const leftNodeRightEdge = {
-        x: leftNode.position.x + (flipped ? 0 : lWidth),
-        y: leftNode.position.y + lHeight / 2,
-      };
-      const rightNodeLeftEdge = {
-        x: rightNode.position.x + (flipped ? rWidth : 0),
-        y: rightNode.position.y + rHeight / 2,
-      };
-
-      // 夫婦線の実際のY座標（PartnershipEdgeに合わせて、ハンドルtop%を使う）
-      const CARD_HEIGHT = LAYOUT.card.height;
-      const LINE_OFFSET = LAYOUT.spouse.lineOffset;
-      const percentForHandle = (h?: string) => (h === 'spouse-left-source' || h === 'spouse-right-target') ? 0.6 : 0.4;
-      const srcCoupleNode = Array.isArray(nodes) ? nodes.find(n => n.id === coupleEdge?.source) : null;
-      const tgtCoupleNode = Array.isArray(nodes) ? nodes.find(n => n.id === coupleEdge?.target) : null;
-      const srcH = percentForHandle((coupleEdge as any)?.sourceHandle);
-      const tgtH = percentForHandle((coupleEdge as any)?.targetHandle);
-      const sY = (srcCoupleNode?.position.y ?? leftNode.position.y) + ((srcCoupleNode as any)?.height ?? lHeight) * srcH;
-      const tY = (tgtCoupleNode?.position.y ?? rightNode.position.y) + ((tgtCoupleNode as any)?.height ?? rHeight) * tgtH;
-      const coupleLineY = Math.min(sY, tY) + CARD_HEIGHT/2 + LINE_OFFSET;
-
-      // 左右反転に対応（パートナーシップの isFlipped で左右入れ替え）
-      let leftX = leftNodeRightEdge.x;
-      let rightX = rightNodeLeftEdge.x;
-      if (flipped) {
-        leftX = rightNodeLeftEdge.x;
-        rightX = leftNodeRightEdge.x;
+      if (!partnershipEdge) {
+        return null; // 夫婦エッジが見つからない場合は描画しない
       }
 
+      // PartnershipEdgeと完全に同じ計算
+      const CARD_HEIGHT = LAYOUT.card.height;
+      const LINE_OFFSET = LAYOUT.spouse.lineOffset;
+      const STUB = LAYOUT.spouse.stub;
+      const EXTRA = LAYOUT.spouse.extra;
+      const flipped = !!partnershipEdge.data?.partnership?.isFlipped;
+
+      // 夫婦エッジのsource/targetノードを特定
+      const srcNode = nodes.find(n => n.id === partnershipEdge.source);
+      const tgtNode = nodes.find(n => n.id === partnershipEdge.target);
+      if (!srcNode || !tgtNode) return null;
+
+      // React Flowと同じハンドル座標計算
+      const srcWidth = (srcNode as any).width ?? DEFAULT_WIDTH;
+      const srcHeight = (srcNode as any).height ?? DEFAULT_HEIGHT;
+      const tgtWidth = (tgtNode as any).width ?? DEFAULT_WIDTH;
+      const tgtHeight = (tgtNode as any).height ?? DEFAULT_HEIGHT;
+
+      // ハンドルY座標（40%または60%）
+      const srcHandleY = srcNode.position.y + srcHeight * (flipped ? 0.6 : 0.4);
+      const tgtHandleY = tgtNode.position.y + tgtHeight * (flipped ? 0.6 : 0.4);
+      
+      // ハンドルX座標
+      const srcHandleX = srcNode.position.x + (flipped ? 0 : srcWidth);
+      const tgtHandleX = tgtNode.position.x + (flipped ? tgtWidth : 0);
+
+      // PartnershipEdgeと同じ水平線Y座標
+      const coupleLineY = Math.min(srcHandleY, tgtHandleY) + CARD_HEIGHT/2 + LINE_OFFSET;
+
+      // PartnershipEdgeと同じ水平線の両端X座標
+      const sxOut = srcHandleX + (flipped ? -(STUB + EXTRA/2) : (STUB + EXTRA/2));
+      const txOut = tgtHandleX + (flipped ? (STUB + EXTRA/2) : -(STUB + EXTRA/2));
+
       const coupleConnectionCenter = {
-        x: (leftX + rightX) / 2,
+        x: (sxOut + txOut) / 2,
         y: coupleLineY,
       };
 
-      // 子どもノードの上端中央（parent-connectionの中心）
-      const cWidth = (targetNode as any).width ?? DEFAULT_WIDTH;
+      // 子どもノードの上端中央（React Flow計算済みの正確なハンドル座標を使用）
       const childTopCenter = {
-        x: targetNode.position.x + cWidth / 2,
-        y: targetNode.position.y, // 上端（Position.Top）
+        x: targetX,
+        y: targetY,
       };
 
       // coupleLine は上で生成済み
@@ -193,18 +193,14 @@ const FamilyEdge: React.FC<EdgeProps> = ({
 
     } else {
       // 単身親の場合：階層的な線を描画（2枚目の画像のスタイル）
-      const sWidth = (sourceNode as any).width ?? DEFAULT_WIDTH;
-      const sHeight = (sourceNode as any).height ?? DEFAULT_HEIGHT;
-      const cWidth = (targetNode as any).width ?? DEFAULT_WIDTH;
-
       const parentBottomCenter = {
-        x: sourceNode.position.x + sWidth / 2,
-        y: sourceNode.position.y + sHeight, // 下端（Position.Bottom）
+        x: sourceX, // React Flowが算出した正確な親のボトムハンドル座標
+        y: sourceY,
       };
       
       const childTopCenter = {
-        x: targetNode.position.x + cWidth / 2,
-        y: targetNode.position.y,
+        x: targetX, // React Flowが算出した正確な子のトップハンドル座標
+        y: targetY,
       };
 
       // 階層的な線の描画：親の下 → 中間点 → 子の上

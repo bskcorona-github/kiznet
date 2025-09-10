@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 
@@ -9,7 +9,6 @@ export const metadata: Metadata = {
   description: "直感的に操作できる家系図作成Webアプリケーション。家族の繋がりを美しく視覚化し、世代を超えて受け継がれる絆を大切に記録できます。",
   keywords: ["家系図", "家族", "系図", "家譜", "ファミリーツリー", "家族関係", "家系"],
   authors: [{ name: "Kiznet Team" }],
-  viewport: "width=device-width, initial-scale=1",
   robots: "index, follow",
   openGraph: {
     title: "Kiznet - 家系図作成アプリ",
@@ -17,6 +16,11 @@ export const metadata: Metadata = {
     type: "website",
     locale: "ja_JP",
   },
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
 };
 
 export default function RootLayout({

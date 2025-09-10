@@ -15,6 +15,8 @@ import ReactFlow, {
   Connection,
   useReactFlow,
   NodeChange,
+  NodeMouseHandler,
+  BackgroundVariant,
 } from "reactflow";
 import "reactflow/dist/style.css";
 import PersonNode from "./PersonNode";
@@ -257,12 +259,9 @@ const TreeCanvas: React.FC = () => {
     return isSpouse || isParentChild;
   }, []);
 
-  const onNodeClick = useCallback(
-    (event: React.MouseEvent, node: PersonNodeType) => {
-      selectNode(node.id);
-    },
-    [selectNode]
-  );
+  const onNodeClick = useCallback<NodeMouseHandler>((event, node) => {
+    selectNode(node.id);
+  }, [selectNode]);
 
   // 安全な配列チェック
   const safeNodes = Array.isArray(nodes) ? nodes : [];
@@ -361,7 +360,7 @@ const TreeCanvas: React.FC = () => {
           position="bottom-right"
           className="react-flow__minimap"
         />
-        <Background variant="dots" gap={20} size={1} />
+        <Background variant={BackgroundVariant.Dots} gap={20} size={1} />
         
         {/* SVG definitions for edge markers */}
         <svg className="react-flow__edges">

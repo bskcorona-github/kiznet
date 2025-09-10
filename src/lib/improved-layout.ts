@@ -745,63 +745,11 @@ function applyPositionsToNodes(
  * 複数の子どもを持つ親の場合、共通の分岐点から線を分ける
  */
 function optimizeEdges(
-  nodes: PersonNode[],
+  _nodes: PersonNode[],
   edges: FamilyEdge[],
-  relationships: ReturnType<typeof analyzeRelationships>
+  _relationships: ReturnType<typeof analyzeRelationships>
 ): FamilyEdge[] {
-  
-  const nodeMap = new Map(nodes.map(n => [n.id, n]));
-  const optimizedEdges: FamilyEdge[] = [];
-  
-  // 配偶者関係のエッジはそのまま追加
-  edges.forEach(edge => {
-    if (edge.type === "partnership") {
-      optimizedEdges.push({
-        ...edge,
-        style: {
-          ...edge.style,
-          strokeWidth: 3,
-        }
-      });
-    }
-  });
-  
-  // 親子関係のエッジを最適化
-  relationships.parentChildren.forEach((children, parentId) => {
-    if (children.length === 0) return;
-    
-    const parentNode = nodeMap.get(parentId);
-    if (!parentNode) return;
-    
-    // 配偶者がいるかチェック
-    const partnerId = relationships.partnerships.get(parentId);
-    const hasPartner = partnerId && nodeMap.has(partnerId);
-    
-    // 各子どもへのエッジを作成
-    children.forEach(childId => {
-      const childNode = nodeMap.get(childId);
-      if (!childNode) return;
-      
-      // 重複チェック（配偶者がいる場合はIDの小さい方のみ）
-      if (hasPartner && parseInt(parentId) > parseInt(partnerId)) {
-        return;
-      }
-      
-      optimizedEdges.push({
-        id: `parent-child-${parentId}-${childId}`,
-        source: parentId,
-        target: childId,
-        type: "parent-child" as const,
-        data: {
-          relationship: {
-            id: parseInt(childId),
-            parentId: parseInt(parentId),
-            partnerId: hasPartner ? parseInt(partnerId) : null
-          }
-        }
-      });
-    });
-  });
-  
-  return optimizedEdges;
+  // レイアウト処理ではエッジ形状の最適化は行わず、そのまま返す
+  // 見た目（幅・色など）は Edge コンポーネント側で制御する
+  return edges;
 }
