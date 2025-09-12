@@ -6,6 +6,23 @@ import { eq, ilike, and } from "drizzle-orm";
 
 export async function GET(request: NextRequest) {
   try {
+    // photo_urlカラムが存在しない場合は追加
+    try {
+      await db.execute(`
+        DO $$ 
+        BEGIN 
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.columns 
+            WHERE table_name = 'people' AND column_name = 'photo_url'
+          ) THEN
+            ALTER TABLE people ADD COLUMN photo_url VARCHAR(500);
+          END IF;
+        END $$;
+      `);
+    } catch (migrationError) {
+      console.warn("Migration warning:", migrationError);
+    }
+
     const { searchParams } = new URL(request.url);
     const treeId = searchParams.get("treeId");
     const search = searchParams.get("search");

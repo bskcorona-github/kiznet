@@ -10,6 +10,23 @@ interface Props {
 
 export async function GET(request: NextRequest, { params }: Props) {
   try {
+    // photo_urlカラムが存在しない場合は追加
+    try {
+      await db.execute(`
+        DO $$ 
+        BEGIN 
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.columns 
+            WHERE table_name = 'people' AND column_name = 'photo_url'
+          ) THEN
+            ALTER TABLE people ADD COLUMN photo_url VARCHAR(500);
+          END IF;
+        END $$;
+      `);
+    } catch (migrationError) {
+      console.warn("Migration warning:", migrationError);
+    }
+
     const id = parseInt(params.id);
     if (isNaN(id)) {
       return NextResponse.json({ error: "Invalid ID" }, { status: 400 });
@@ -33,6 +50,23 @@ export async function GET(request: NextRequest, { params }: Props) {
 
 export async function PUT(request: NextRequest, { params }: Props) {
   try {
+    // photo_urlカラムが存在しない場合は追加
+    try {
+      await db.execute(`
+        DO $$ 
+        BEGIN 
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.columns 
+            WHERE table_name = 'people' AND column_name = 'photo_url'
+          ) THEN
+            ALTER TABLE people ADD COLUMN photo_url VARCHAR(500);
+          END IF;
+        END $$;
+      `);
+    } catch (migrationError) {
+      console.warn("Migration warning:", migrationError);
+    }
+
     const id = parseInt(params.id);
     if (isNaN(id)) {
       return NextResponse.json({ error: "Invalid ID" }, { status: 400 });
@@ -60,6 +94,7 @@ export async function PUT(request: NextRequest, { params }: Props) {
         lat: validatedData.lat || null,
         lng: validatedData.lng || null,
         note: validatedData.note || null,
+        photoUrl: validatedData.photoUrl || null,
         updatedAt: new Date(),
       })
       .where(eq(people.id, id))
@@ -81,6 +116,23 @@ export async function PUT(request: NextRequest, { params }: Props) {
 
 export async function PATCH(request: NextRequest, { params }: Props) {
   try {
+    // photo_urlカラムが存在しない場合は追加
+    try {
+      await db.execute(`
+        DO $$ 
+        BEGIN 
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.columns 
+            WHERE table_name = 'people' AND column_name = 'photo_url'
+          ) THEN
+            ALTER TABLE people ADD COLUMN photo_url VARCHAR(500);
+          END IF;
+        END $$;
+      `);
+    } catch (migrationError) {
+      console.warn("Migration warning:", migrationError);
+    }
+
     const id = parseInt(params.id);
     if (isNaN(id)) {
       return NextResponse.json({ error: "Invalid ID" }, { status: 400 });
@@ -105,6 +157,7 @@ export async function PATCH(request: NextRequest, { params }: Props) {
       lat: body.lat === "" ? null : body.lat,
       lng: body.lng === "" ? null : body.lng,
       note: body.note === "" ? null : body.note,
+      photoUrl: body.photoUrl === "" ? null : body.photoUrl,
       positionX: body.positionX,
       positionY: body.positionY,
     };
@@ -130,6 +183,7 @@ export async function PATCH(request: NextRequest, { params }: Props) {
         lat: validatedData.lat || null,
         lng: validatedData.lng || null,
         note: validatedData.note || null,
+        photoUrl: validatedData.photoUrl || null,
         positionX: validatedData.positionX || null,
         positionY: validatedData.positionY || null,
         updatedAt: new Date(),
