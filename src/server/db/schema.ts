@@ -27,6 +27,8 @@ export const people = pgTable("people", {
   lat: varchar("lat", { length: 32 }),
   lng: varchar("lng", { length: 32 }),
   note: varchar("note", { length: 1000 }),
+  // 写真（Vercel Blob URL）
+  photoUrl: varchar("photo_url", { length: 500 }),
   // 家系図での表示位置（手動配置の保存用）
   positionX: integer("position_x"), // React Flowでのx座標
   positionY: integer("position_y"), // React Flowでのy座標

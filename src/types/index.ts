@@ -28,6 +28,8 @@ export type Person = {
   lat?: string | null;
   lng?: string | null;
   note?: string | null;
+  // 写真（Vercel Blob URL）
+  photoUrl?: string | null;
   // 家系図での表示位置（手動配置の保存用）
   positionX?: number | null;
   positionY?: number | null;
@@ -103,6 +105,8 @@ export const PersonSchema = z.object({
   lat: z.string().max(32).nullable().optional(),
   lng: z.string().max(32).nullable().optional(),
   note: z.string().max(1000).nullable().optional(),
+  // 写真URL
+  photoUrl: z.string().max(500).nullable().optional(),
   // 家系図での表示位置
   positionX: z.number().nullable().optional(),
   positionY: z.number().nullable().optional(),

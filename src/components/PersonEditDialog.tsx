@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Person } from "@/types";
-import { MapPin } from "lucide-react";
+import { MapPin, Upload, X, User } from "lucide-react";
 
 type Props = {
   person: Person;
@@ -33,7 +33,9 @@ const PersonEditDialog: React.FC<Props> = ({ person, open, onOpenChange, onSaved
   const [prefecture, setPrefecture] = useState("");
   const [country, setCountry] = useState("");
   const [note, setNote] = useState("");
+  const [photoUrl, setPhotoUrl] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
 
   // 人物データをフォームに設定
   useEffect(() => {
@@ -52,8 +54,57 @@ const PersonEditDialog: React.FC<Props> = ({ person, open, onOpenChange, onSaved
       setPrefecture(person.prefecture || "");
       setCountry(person.country || "");
       setNote(person.note || "");
+      setPhotoUrl(person.photoUrl || "");
     }
   }, [person]);
+
+  // 写真アップロード処理
+  const handlePhotoUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    // ファイルサイズチェック（200KB）
+    if (file.size > 200 * 1024) {
+      alert("ファイルサイズは200KB以下にしてください。");
+      return;
+    }
+
+    // WebP形式でない場合は変換を促す
+    if (!file.type.includes("webp")) {
+      alert("WebP形式のファイルをアップロードしてください。");
+      return;
+    }
+
+    setUploadingPhoto(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const response = await fetch("/api/upload-photo", {
+        method: "POST",
+        body: formData,
+      });
+
+      const result = await response.json();
+
+      if (response.ok) {
+        setPhotoUrl(result.url);
+        alert("写真をアップロードしました。");
+      } else {
+        alert(result.error || "アップロードに失敗しました。");
+      }
+    } catch (error) {
+      console.error("Upload error:", error);
+      alert("アップロードに失敗しました。");
+    } finally {
+      setUploadingPhoto(false);
+    }
+  };
+
+  // 写真削除
+  const handlePhotoRemove = () => {
+    setPhotoUrl("");
+  };
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -76,6 +127,7 @@ const PersonEditDialog: React.FC<Props> = ({ person, open, onOpenChange, onSaved
         prefecture: prefecture.trim() || null,
         country: country.trim() || null,
         note: note.trim() || null,
+        photoUrl: photoUrl.trim() || null,
       };
 
       const res = await fetch(`/api/people/${person.id}`, {
@@ -179,6 +231,68 @@ const PersonEditDialog: React.FC<Props> = ({ person, open, onOpenChange, onSaved
               placeholder="長男、次女、三男など" 
               maxLength={20}
             />
+          </div>
+
+          {/* 写真アップロード */}
+          <div>
+            <Label>写真（任意）</Label>
+            <div className="mt-2 space-y-3">
+              {photoUrl ? (
+                <div className="flex items-center gap-3">
+                  <div className="relative">
+                    <img
+                      src={photoUrl}
+                      alt="プロフィール写真"
+                      className="w-16 h-16 rounded-full object-cover border-2 border-gray-200"
+                    />
+                    <button
+                      type="button"
+                      onClick={handlePhotoRemove}
+                      className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs hover:bg-red-600"
+                      title="写真を削除"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
+                  <div className="text-sm text-gray-600">
+                    写真が設定されています
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-center gap-3">
+                  <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center border-2 border-dashed border-gray-300">
+                    <User className="w-8 h-8 text-gray-400" />
+                  </div>
+                  <div className="text-sm text-gray-600">
+                    写真が設定されていません
+                  </div>
+                </div>
+              )}
+              <div>
+                <input
+                  type="file"
+                  id="photo-upload"
+                  accept="image/webp"
+                  onChange={handlePhotoUpload}
+                  className="hidden"
+                  disabled={uploadingPhoto}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => document.getElementById('photo-upload')?.click()}
+                  disabled={uploadingPhoto}
+                  className="flex items-center gap-2"
+                >
+                  <Upload className="w-4 h-4" />
+                  {uploadingPhoto ? "アップロード中..." : "写真をアップロード"}
+                </Button>
+                <div className="text-xs text-gray-500 mt-1">
+                  WebP形式、200KB以下のファイルをアップロードしてください
+                </div>
+              </div>
+            </div>
           </div>
 
           {/* 生年月日・没年月日 */}

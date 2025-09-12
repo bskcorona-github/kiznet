@@ -104,8 +104,21 @@ const PersonNode = memo(({ data, selected }: NodeProps<PersonNodeType["data"]>) 
         onClick={() => setOpen(true)}
       >
         <CardContent className="p-2 h-full flex flex-col justify-center">
-          {/* コンパクト表示：名前、続柄、性別 */}
+          {/* コンパクト表示：写真、名前、続柄、性別 */}
           <div className="flex items-center gap-2 w-full">
+            {/* 写真アイコン */}
+            {person.photoUrl ? (
+              <img
+                src={person.photoUrl}
+                alt={fullName}
+                className="w-8 h-8 rounded-full object-cover border border-gray-300 flex-shrink-0"
+              />
+            ) : (
+              <div className="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center border border-gray-300 flex-shrink-0">
+                <User className="w-4 h-4 text-gray-400" />
+              </div>
+            )}
+            
             <div className="flex-1 min-w-0">
               <div className="text-[20px] font-medium truncate" title={fullName}>
                 {fullName}
